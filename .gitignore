@@ -1,0 +1,34 @@
+# ---- Terraform ----
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+# tfvars 里有邮箱、IP 等个人信息，不进 git；只提交 *.tfvars.example
+*.tfvars
+!*.tfvars.example
+.terraform.tfstate.lock.info
+# 打包出来的 Lambda zip
+terraform/build/
+
+# ---- Kubernetes ----
+# kubeconfig 里有集群管理员证书，等同于 root 密码
+kubeconfig*
+*.kubeconfig
+admin.conf
+
+# ---- 密钥 / 证书 ----
+secrets/
+*.pem
+*.key
+*.crt
+.env
+.env.*
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,18 @@
+# 复制一份再修改：  cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars 已经写进 .gitignore，不会被提交到 git（里面有你的邮箱、IP 等个人信息）。
+
+# 预算告警发到这个邮箱。留空 = 不创建预算告警
+budget_email     = "you@example.com"
+budget_limit_usd = 80
+
+# 每晚自动关机（按你所在的时区）
+autostop_enabled  = true
+autostop_cron     = "cron(0 2 * * ? *)" # 每天 02:00
+autostop_timezone = "America/New_York"
+
+# 节点数量：现在是 1 个 control plane + 2 个 worker；第 11 章改成 3 + 3
+cp_count     = 1
+worker_count = 2
+
+# 第 13 章才用到：你的公网 IP（/32）。可以用 ../scripts/update-my-ip.sh 自动填
+# my_ip_cidr = "203.0.113.10/32"

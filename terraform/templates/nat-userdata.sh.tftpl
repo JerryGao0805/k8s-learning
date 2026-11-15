@@ -1,0 +1,30 @@
+#!/bin/bash
+# ------------------------------------------------------------
+# NAT 实例首次开机时由 cloud-init 执行（只在第一次开机时执行）。
+# 所以这里做的每项配置都必须"持久化"，否则 stop/start 之后就丢了。
+# ------------------------------------------------------------
+set -euxo pipefail
+
+# 命令行提示符里显示 (nat)，免得登录后分不清是哪台机器
+echo "nat" > /etc/debian_chroot
+
+# 1) 打开内核的 IP 转发：允许这台机器转发"目的地不是自己"的数据包。
+#    默认是 0（关），普通服务器不该当路由器。写进 /etc/sysctl.d/ 才能重启后依然生效。
+cat > /etc/sysctl.d/99-nat.conf <<'EOF'
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system
+
+# 2) 安装 iptables-persistent：开机时自动从 /etc/iptables/rules.v4 恢复规则
+export DEBIAN_FRONTEND=noninteractive
+echo iptables-persistent iptables-persistent/autosave_v4 boolean false | debconf-set-selections
+echo iptables-persistent iptables-persistent/autosave_v6 boolean false | debconf-set-selections
+apt-get update -y
+apt-get install -y iptables-persistent
+
+# 3) MASQUERADE（一种 SNAT）：从 VPC 内部来、要从外网网卡出去的包，
+#    把源地址改成本机的地址。回包到达时，内核根据 conntrack 表再改回去。
+#    Graviton 实例的网卡名通常是 ens5（不是 eth0），这里自动探测。
+IFACE=$(ip route show default | awk '{print $5; exit}')
+iptables -t nat -A POSTROUTING -s ${vpc_cidr} -o "$IFACE" -j MASQUERADE
+netfilter-persistent save
