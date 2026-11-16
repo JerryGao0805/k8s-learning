@@ -45,9 +45,9 @@
 |---|---|---|---|
 | **阶段 0 · 准备** ||||
 | 00 | [前置准备与全局概览](docs/00-prerequisites.md) | K8s 架构全景、工具安装、费用模型 | ⬜ |
-| 01 | [AWS 网络地基](docs/01-aws-foundation.md) | Terraform、VPC/子网/路由、NAT 原理、安全组、SSM、内网 NLB | ⬜ |
+| 01 | [AWS 网络地基](docs/01-aws-foundation.md) | Terraform、VPC/子网/路由、NAT 原理、安全组、SSM、私有 DNS | ⬜ |
 | **阶段 1 · 搭建集群** ||||
-| 02 | 节点准备 | 容器的本质（namespace/cgroup）、containerd、kubeadm 安装 | ⬜ |
+| 02 | [节点准备](docs/02-node-prep.md) | 容器的本质（namespace/cgroup）、containerd、kubeadm 安装、SSM Run Command | ⬜ |
 | 03 | kubeadm init | 证书体系、static pod、etcd、控制面组件 | ⬜ |
 | 04 | 安装 Calico | CNI 规范、VXLAN、Pod 网络底层 | ⬜ |
 | 05 | 加入 worker 与远程访问 | TLS bootstrap、CSR、kubeconfig | ⬜ |
@@ -58,7 +58,7 @@
 | 09 | 配置、资源与调度 | ConfigMap/Secret、探针、QoS、亲和性、污点 | ⬜ |
 | 10 | 存储 | PV/PVC/StorageClass、EBS CSI、StatefulSet | ⬜ |
 | **阶段 3 · 生产化** ||||
-| 11 | etcd 备份与控制面高可用 | 快照恢复、Raft 多数派、leader 选举 | ⬜ |
+| 11 | etcd 备份与控制面高可用 | 快照恢复、Raft 多数派、leader 选举、内网 NLB | ⬜ |
 | 12 | 示例应用上线 | Dockerfile、ECR、Kustomize | ⬜ |
 | 13 | 流量入口 | Gateway API、cert-manager、external-dns | ⬜ |
 | **阶段 4 · 进阶** ||||
@@ -96,11 +96,12 @@ cd ~/Desktop/code/K8s-learning
 
 | 阶段 | 停机时的固定费用 | 运行时的费用 | 每月学 40 小时的估算 |
 |---|---|---|---|
-| 第 01–10 章（1 CP + 2 worker） | 约 $25/月（内网 NLB、EBS 磁盘、Route53） | 约 $0.21/小时 | 约 $35/月 |
-| 第 11–12 章（3 CP + 3 worker） | 约 $32/月 | 约 $0.35/小时 | 约 $46/月 |
+| 第 01–10 章（1 CP + 2 worker） | 约 $9/月（EBS 磁盘、Route53） | 约 $0.21/小时 | 约 $17/月 |
+| 第 11–12 章（3 CP + 3 worker + 内网 NLB） | 约 $32/月 | 约 $0.35/小时 | 约 $46/月 |
 | 第 13 章起（再加公网 NLB） | 约 $52/月 | 约 $0.36/小时 | 约 $66/月 |
 
-- **stop 之后，实例的小时费就停了**，但磁盘、负载均衡器会继续计费。
+- **stop 之后，实例的小时费就停了**，但磁盘、负载均衡器（第 11 章起）会继续计费。
+- 新 AWS 账号可能不允许创建负载均衡，第 11、13 章要用。尽早按 [第 01 章附录](docs/01-aws-foundation.md#-附录申请解除负载均衡限制) 开 support case 解除限制。
 - 长时间不学（比如超过两周），可以 `terraform destroy` 全部删掉，之后需要按章节重新搭一遍。
 - 已经配了 AWS Budgets 告警（$80/月）。
 

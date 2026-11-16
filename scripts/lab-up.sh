@@ -63,7 +63,8 @@ ok "节点已进入 running"
 log "3/3 等待所有实例在 SSM 上显示 Online（最多 6 分钟）..."
 want=$(echo "$nat $nodes" | wc -w | tr -d ' ')
 for i in $(seq 1 36); do
-  online=$(ssm_online_ids)
+  # aws --output text 用 Tab 分隔多个 ID，换成空格，下面的 " $id " 匹配才认得出来
+  online=$(ssm_online_ids | tr '\t' ' ')
   n=0
   for id in $nat $nodes; do
     case " $online " in *" $id "*) n=$((n + 1)) ;; esac

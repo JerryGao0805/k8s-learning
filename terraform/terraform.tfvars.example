@@ -14,5 +14,8 @@ autostop_timezone = "America/New_York"
 cp_count     = 1
 worker_count = 2
 
+# 第 11 章才打开：在 control plane 前面放内网 NLB（账号要先能创建负载均衡，见第 01 章附录）
+# enable_api_lb = true
+
 # 第 13 章才用到：你的公网 IP（/32）。可以用 ../scripts/update-my-ip.sh 自动填
 # my_ip_cidr = "203.0.113.10/32"

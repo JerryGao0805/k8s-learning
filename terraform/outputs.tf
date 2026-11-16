@@ -26,13 +26,19 @@ output "control_plane_endpoint" {
   value       = "${aws_route53_record.api.name}:6443"
 }
 
+output "api_dns_records" {
+  description = "api.k8s.internal 现在解析到哪里：control plane 的 IP 列表；开了 NLB 之后为 null（改为 alias 到 NLB）"
+  value       = aws_route53_record.api.records
+}
+
 output "api_nlb_dns" {
-  value = aws_lb.api.dns_name
+  description = "内网 NLB 的 DNS 名（enable_api_lb = false 时为 null）"
+  value       = one(aws_lb.api[*].dns_name)
 }
 
 output "api_target_group_arn" {
-  description = "查看 NLB 目标健康状态：aws elbv2 describe-target-health --target-group-arn <这个值>"
-  value       = aws_lb_target_group.api.arn
+  description = "查看 NLB 目标健康状态：aws elbv2 describe-target-health --target-group-arn <这个值>（未开 NLB 时为 null）"
+  value       = one(aws_lb_target_group.api[*].arn)
 }
 
 output "ssm_shell_document" {

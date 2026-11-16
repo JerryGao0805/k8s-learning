@@ -12,6 +12,7 @@
 | `./scripts/lab-down.sh` | 收工：stop 所有实例 |
 | `./scripts/status.sh` | 查看实例状态、IP、SSM 是否在线 |
 | `./scripts/ssm.sh <节点名>` | 登录节点：`cp-1`、`worker-1`、`nat` ... |
+| `./scripts/run-on-nodes.sh <脚本> <节点>...` | 用 SSM Run Command 把脚本推到节点上以 root 执行，例如 `scripts/node/check-node.sh cp-1 worker-1 worker-2` |
 | `./scripts/api-tunnel.sh` | 打开 Mac → apiserver 的隧道（第 05 章起使用） |
 | `./scripts/autostop.sh status\|on\|off` | 每晚自动关机的开关 |
 | `./scripts/update-my-ip.sh` | 把当前公网 IP 写进 tfvars（第 13 章起使用） |
@@ -35,7 +36,13 @@
 ```bash
 aws sts get-caller-identity                     # 我是谁
 
-# 查看 NLB 目标健康状态
+# 查看 api.k8s.internal 的 DNS 记录（现在指向 cp-1 的 IP；第 11 章起指向 NLB）
+ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name k8s.internal \
+  --query "HostedZones[?Name=='k8s.internal.'].Id | [0]" --output text)
+aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+  --query "ResourceRecordSets[?Name=='api.k8s.internal.']" --output table
+
+# 查看 NLB 目标健康状态（第 11 章打开 enable_api_lb 之后）
 aws elbv2 describe-target-health \
   --target-group-arn "$(terraform -chdir=terraform output -raw api_target_group_arn)" \
   --query 'TargetHealthDescriptions[].{Target:Target.Id,State:TargetHealth.State,Reason:TargetHealth.Reason}' \
@@ -60,6 +67,32 @@ aws ec2 describe-route-tables --filters "Name=tag:Name,Values=k8s-lab-private-rt
 | `sudo iptables -t nat -S` | 查看 NAT 表的规则 |
 | `cloud-init status` | 开机初始化脚本是否执行完毕 |
 | `sudo tail -50 /var/log/cloud-init-output.log` | 开机脚本的输出日志 |
+
+## 节点：服务与日志（第 02 章）
+
+| 命令 | 作用 |
+|---|---|
+| `sudo -i` | 切换成 root shell（`exit` 退回） |
+| `systemctl status <服务> --no-pager` | 服务现在的状态（排障第一步） |
+| `journalctl -u <服务> -n 50 --no-pager` | 服务最近的日志（排障第二步） |
+| `journalctl -u kubelet -f` | 持续跟踪 kubelet 日志 |
+| `systemctl cat kubelet` | 查看 kubelet 的启动命令和 drop-in |
+| `apt-mark showhold` | 查看被锁定版本的软件包 |
+| `chronyc -n sources` / `chronyc tracking` | 时间同步的来源和状态 |
+
+## 节点：容器运行时（第 02 章）
+
+| 命令 | 作用 |
+|---|---|
+| `sudo crictl ps -a` | 经 CRI 列出容器（K8s 视角，命名空间 `k8s.io`） |
+| `sudo crictl pods` | 列出 Pod sandbox |
+| `sudo crictl images` | 列出镜像 |
+| `sudo crictl logs <容器ID>` | 看容器日志（apiserver 起不来时很有用） |
+| `sudo crictl info` | 运行时状态（RuntimeReady / NetworkReady） |
+| `sudo ctr -n k8s.io images ls -q` | 绕过 CRI 直接看 containerd（`-n` 指定 containerd 命名空间） |
+| `sudo containerd config dump` | containerd 实际生效的配置 |
+| `sudo lsns -p <PID>` | 某个进程所在的 Linux namespace |
+| `cat /proc/<PID>/cgroup` | 某个进程所在的 cgroup |
 
 ## kubectl
 

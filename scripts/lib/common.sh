@@ -51,8 +51,11 @@ instance_ids_by_role() {
 }
 
 # 列出所有已注册到 SSM 且状态为 Online 的本项目实例 ID
+# 注意：SSM 的 tag 过滤不能和其他过滤条件（如 PingStatus）写在同一个 --filters 里，
+# 否则报 ValidationException: Cannot mix tag or inventory filter with any other filter。
+# 所以服务端只按 tag 过滤，Online 交给 --query（JMESPath）在本地筛。
 ssm_online_ids() {
   aws ssm describe-instance-information \
-    --filters "Key=tag:Project,Values=${PROJECT}" "Key=PingStatus,Values=Online" \
-    --query 'InstanceInformationList[].InstanceId' --output text
+    --filters "Key=tag:Project,Values=${PROJECT}" \
+    --query "InstanceInformationList[?PingStatus=='Online'].InstanceId" --output text
 }

@@ -31,6 +31,8 @@ resource "aws_security_group" "worker" {
   tags        = { Name = "${var.cluster_name}-worker" }
 }
 
+# 给内网 NLB 用的安全组。NLB 第 11 章才建（enable_api_lb），但 NLB 的安全组只能在创建时绑定，
+# 所以先把它和相关规则建好留着。安全组本身不收费。
 resource "aws_security_group" "api_lb" {
   name        = "${var.cluster_name}-api-lb"
   description = "Internal NLB in front of kube-apiserver"
