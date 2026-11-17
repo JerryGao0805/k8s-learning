@@ -47,8 +47,8 @@
 | 00 | [前置准备与全局概览](docs/00-prerequisites.md) | K8s 架构全景、工具安装、费用模型 | ⬜ |
 | 01 | [AWS 网络地基](docs/01-aws-foundation.md) | Terraform、VPC/子网/路由、NAT 原理、安全组、SSM、私有 DNS | ⬜ |
 | **阶段 1 · 搭建集群** ||||
-| 02 | [节点准备](docs/02-node-prep.md) | 容器的本质（namespace/cgroup）、containerd、kubeadm 安装、SSM Run Command | ⬜ |
-| 03 | kubeadm init | 证书体系、static pod、etcd、控制面组件 | ⬜ |
+| 02 | [节点准备](docs/02-node-prep.md) | 容器的本质（namespace/cgroup）、containerd、kubeadm 安装、SSM Run Command | ✅ |
+| 03 | [kubeadm init](docs/03-kubeadm-init.md) | 控制面组件、证书即身份、kubeconfig、static pod、etcd 一瞥、kubelet 证书 | ⬜ |
 | 04 | 安装 Calico | CNI 规范、VXLAN、Pod 网络底层 | ⬜ |
 | 05 | 加入 worker 与远程访问 | TLS bootstrap、CSR、kubeconfig | ⬜ |
 | **阶段 2 · 核心对象** ||||

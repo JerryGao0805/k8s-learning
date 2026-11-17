@@ -1,0 +1,31 @@
+# kubeadm 配置（第 03 章）。只写"和默认值不同"或"需要固定住"的项。
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+clusterName: k8s-lab
+kubernetesVersion: v1.36.6                  # 固定版本，和第 02 章预拉的镜像一致
+controlPlaneEndpoint: api.k8s.internal:6443 # 集群的"门牌号"，第 11 章扩 HA 全靠它
+networking:
+  podSubnet: 192.168.0.0/16                 # Pod 的 IP 池，第 04 章 Calico 用同一个
+  serviceSubnet: 10.96.0.0/12               # Service 的 IP 池（就是默认值，写出来固定住）
+controllerManager:
+  extraArgs:
+    - name: bind-address                    # 指标端口对外监听，第 14 章 Prometheus 要来抓
+      value: 0.0.0.0
+scheduler:
+  extraArgs:
+    - name: bind-address
+      value: 0.0.0.0
+etcd:
+  local:
+    extraArgs:
+      - name: listen-metrics-urls
+        value: http://0.0.0.0:2381
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+serverTLSBootstrap: true                    # kubelet 的 HTTPS 证书由集群 CA 签发（步骤 15）
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+mode: iptables                              # 现在就是默认值，固定住，第 08 章要看它生成的规则
+metricsBindAddress: 0.0.0.0:10249           # 同样是给第 14 章抓指标用

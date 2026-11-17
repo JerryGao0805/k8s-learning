@@ -94,6 +94,37 @@ aws ec2 describe-route-tables --filters "Name=tag:Name,Values=k8s-lab-private-rt
 | `sudo lsns -p <PID>` | 某个进程所在的 Linux namespace |
 | `cat /proc/<PID>/cgroup` | 某个进程所在的 cgroup |
 
-## kubectl
+## kubectl（第 03 章起）
 
-（第 03 章起补充）
+> 第 03、04 章在 cp-1 上用（root 已设好 `KUBECONFIG=/etc/kubernetes/admin.conf`，`k` 是 `kubectl` 的缩写）；第 05 章起也可以在 Mac 上用。
+
+| 命令 | 作用 |
+|---|---|
+| `kubectl get nodes -o wide` | 节点列表，带 IP、系统、容器运行时 |
+| `kubectl get pods -A -o wide` | 所有命名空间的 Pod，带 IP 和所在节点 |
+| `kubectl -n kube-system get deploy,ds,cm` | 一次查看多种对象 |
+| `kubectl describe node <节点>` | 节点详情：Conditions、Taints、资源（排障常用） |
+| `kubectl describe pod <Pod> -n <命名空间>` | Pod 详情：Tolerations、Events |
+| `kubectl -n <命名空间> logs <Pod> --tail=20` | 看 Pod 日志（要求 kubelet 的服务端证书已批准） |
+| `kubectl get events -A --field-selector reason=FailedScheduling` | 调度失败的原因 |
+| `kubectl get <对象> -o yaml` / `-o jsonpath='{.spec.podCIDR}'` | 看对象的完整定义 / 取某个字段 |
+| `kubectl auth whoami` | 在集群眼里我是谁（用户名、组） |
+| `kubectl get csr` | 证书签名请求列表 |
+| `kubectl get csr --field-selector spec.signerName=kubernetes.io/kubelet-serving -o name \| xargs kubectl certificate approve` | 批准所有 kubelet 服务端证书申请（先核对内容） |
+| `kubectl get --raw='/readyz?verbose'` | apiserver 的各项健康检查 |
+| `kubectl -n kube-system get lease` | 谁持有 controller-manager / scheduler 的锁 |
+
+## 控制面（第 03 章，在 cp-1 上以 root 执行）
+
+| 命令 | 作用 |
+|---|---|
+| `ls /etc/kubernetes/manifests/` | static pod 的定义文件（移走 = 停掉，移回 = 启动；备份别放这里） |
+| `find /etc/kubernetes/pki -type f \| sort` | 所有证书和私钥 |
+| `openssl x509 -in <证书> -noout -subject -issuer -dates -ext subjectAltName` | 看证书的身份、签发者、有效期、SAN |
+| `kubeadm certs check-expiration` | 所有证书的到期时间 |
+| `kubeadm token list` | bootstrap token 列表（给新节点加入用） |
+| `kubeadm config validate --config <文件>` | 校验 kubeadm 配置文件 |
+| `cat /var/lib/kubelet/config.yaml` | kubelet 的配置 |
+| `curl -s http://127.0.0.1:10248/healthz` | kubelet 健康检查 |
+| `crictl exec $(crictl ps --name etcd -q) etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key member list -w table` | 在 etcd 容器里执行 etcdctl（第 03 章步骤 12 有简化用的函数） |
+| `kubeadm reset -f` | 撤销 init/join（危险！会删掉证书和控制面） |
