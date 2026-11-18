@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------
+# postgres：用 StatefulSet 跑，每个副本有自己固定的名字（postgres-0）和自己的 EBS 磁盘。
+#
+# 密码来自 Secret postgres-auth（不在 git 里，部署前手动创建）。
+# 注意：POSTGRES_PASSWORD 只在第一次初始化空磁盘时生效；之后再改 Secret，数据库里的密码不会跟着变。
+# ---------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  # headless Service：不分配虚拟 IP，DNS 直接返回 Pod 的 IP。StatefulSet 要求配一个这样的 Service。
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  serviceName: postgres       # 上面那个 headless Service
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      # 这里没有像 api/web 那样设置 runAsNonRoot：官方镜像的入口脚本要先以 root 身份
+      # 把新 EBS 磁盘上的目录 chown 给 postgres 用户（UID 70），然后自己降权再启动数据库。
+      containers:
+        - name: postgres
+          image: public.ecr.aws/docker/library/postgres:18-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: app
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-auth
+                  key: password
+          volumeMounts:
+            # Postgres 18 起，官方镜像的数据目录（PGDATA）默认是 /var/lib/postgresql/18/docker，
+            # 推荐把卷挂在上一级 /var/lib/postgresql（17 及以前是挂在 .../data）。
+            # 好处：EBS 卷格式化成 ext4 后，根目录里会有一个 lost+found 目录，而 initdb 要求数据目录是空的；
+            # 挂在上一级后，数据目录是磁盘里的子目录 18/docker，不受 lost+found 影响，也就不用再设 PGDATA。
+            - name: data
+              mountPath: /var/lib/postgresql
+          # 就绪探针：用 -h 127.0.0.1 走 TCP。首次初始化时，镜像会先起一个只监听 unix socket 的临时实例，
+          # 走 TCP 检查能避免把这个临时实例误判为"就绪"。
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30   # 给首次初始化留时间
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+  # 每个副本按这个模板自动创建一个 PVC（名字是 data-postgres-0），由 EBS CSI 动态创建 EBS 卷。
+  # Pod 删掉重建后还会挂回同一块盘，数据不丢。
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: postgres
+      spec:
+        accessModes: ["ReadWriteOnce"]   # EBS 同一时间只能挂到一个节点
+        storageClassName: gp3            # 第 07 章创建的 StorageClass
+        resources:
+          requests:
+            storage: 5Gi

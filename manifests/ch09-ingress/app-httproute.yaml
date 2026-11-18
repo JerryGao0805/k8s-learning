@@ -1,0 +1,25 @@
+# 第 09 章：把 https://app.lab.<域名> 接到示例应用。
+# /api 开头的转给 api，其他的转给 web（静态页面）。${LAB_DOMAIN} 在 apply 时由 envsubst 填入。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app
+  namespace: app
+spec:
+  parentRefs:
+    - name: lab
+      namespace: gateway
+      sectionName: https
+  hostnames:
+    - app.lab.${LAB_DOMAIN}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api
+          port: 80
+    - backendRefs:
+        - name: web
+          port: 80

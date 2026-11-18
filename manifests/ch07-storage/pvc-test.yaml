@@ -1,0 +1,29 @@
+# 第 07 章的存储测试：一个 1Gi 的 PVC，加一个往里面写文件的 Pod。测完就删。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ebs-test
+spec:
+  accessModes: [ReadWriteOnce]     # EBS 卷同一时间只能挂到一个节点上
+  resources:
+    requests:
+      storage: 1Gi
+  # 没写 storageClassName：用默认的 gp3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ebs-test
+spec:
+  containers:
+    - name: box
+      image: public.ecr.aws/docker/library/busybox:1.37
+      command: ["sh", "-c", "date >> /data/hello.txt; sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ebs-test
+  terminationGracePeriodSeconds: 2

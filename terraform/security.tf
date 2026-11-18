@@ -31,7 +31,7 @@ resource "aws_security_group" "worker" {
   tags        = { Name = "${var.cluster_name}-worker" }
 }
 
-# 给内网 NLB 用的安全组。NLB 第 11 章才建（enable_api_lb），但 NLB 的安全组只能在创建时绑定，
+# 给内网 NLB 用的安全组。NLB 要等账号能创建负载均衡后才建（enable_api_lb），但 NLB 的安全组只能在创建时绑定，
 # 所以先把它和相关规则建好留着。安全组本身不收费。
 resource "aws_security_group" "api_lb" {
   name        = "${var.cluster_name}-api-lb"
@@ -82,12 +82,19 @@ locals {
     "cp-typha-from-worker" = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 5473, to = 5473, desc = "Calico Typha" }
     # ICMP：方便 ping 排障；更重要的是 "需要分片"(type 3 code 4) 消息，MTU 探测要靠它
     "cp-icmp-from-vpc" = { sg = local.sg_cp, from_sg = null, cidr = var.vpc_cidr, proto = "icmp", from = -1, to = -1, desc = "ICMP (ping, PMTU discovery)" }
+    # 监控（第 10 章）：Prometheus 跑在 worker 上，来抓 control plane 上各组件的指标。
+    # Pod 访问节点 IP 时，Calico 的 natOutgoing 会把源地址换成 Pod 所在节点的 IP，所以来源写 worker 安全组。
+    "cp-etcd-metrics-from-worker"  = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 2381, to = 2381, desc = "etcd metrics (Prometheus)" }
+    "cp-proxy-metrics-from-worker" = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 10249, to = 10249, desc = "kube-proxy metrics (Prometheus)" }
+    "cp-10257-from-worker"         = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 10257, to = 10257, desc = "kube-controller-manager metrics (Prometheus)" }
+    "cp-10259-from-worker"         = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 10259, to = 10259, desc = "kube-scheduler metrics (Prometheus)" }
+    "cp-node-exporter-from-worker" = { sg = local.sg_cp, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 9100, to = 9100, desc = "node-exporter (Prometheus)" }
 
     # ---------------- Worker ----------------
     "worker-10250-from-cp"     = { sg = local.sg_worker, from_sg = local.sg_cp, cidr = null, proto = "tcp", from = 10250, to = 10250, desc = "kubelet API" }
     "worker-10250-from-worker" = { sg = local.sg_worker, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 10250, to = 10250, desc = "kubelet API (metrics-server etc.)" }
     "worker-10256-from-vpc"    = { sg = local.sg_worker, from_sg = null, cidr = var.vpc_cidr, proto = "tcp", from = 10256, to = 10256, desc = "kube-proxy healthz" }
-    # NodePort 端口段：第 08 章会在节点之间用 curl 测试 NodePort Service
+    # NodePort 端口段：第 14 章会在节点之间用 curl 测试 NodePort Service
     "worker-nodeport-tcp-from-cp"     = { sg = local.sg_worker, from_sg = local.sg_cp, cidr = null, proto = "tcp", from = 30000, to = 32767, desc = "NodePort Services (TCP)" }
     "worker-nodeport-tcp-from-worker" = { sg = local.sg_worker, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 30000, to = 32767, desc = "NodePort Services (TCP)" }
     "worker-nodeport-udp-from-cp"     = { sg = local.sg_worker, from_sg = local.sg_cp, cidr = null, proto = "udp", from = 30000, to = 32767, desc = "NodePort Services (UDP)" }
@@ -97,6 +104,9 @@ locals {
     "worker-typha-from-cp"            = { sg = local.sg_worker, from_sg = local.sg_cp, cidr = null, proto = "tcp", from = 5473, to = 5473, desc = "Calico Typha" }
     "worker-typha-from-worker"        = { sg = local.sg_worker, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 5473, to = 5473, desc = "Calico Typha" }
     "worker-icmp-from-vpc"            = { sg = local.sg_worker, from_sg = null, cidr = var.vpc_cidr, proto = "icmp", from = -1, to = -1, desc = "ICMP (ping, PMTU discovery)" }
+    # 监控（第 10 章）：Prometheus 抓其他 worker 上的 kube-proxy 指标和 node-exporter
+    "worker-proxy-metrics-from-worker" = { sg = local.sg_worker, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 10249, to = 10249, desc = "kube-proxy metrics (Prometheus)" }
+    "worker-node-exporter-from-worker" = { sg = local.sg_worker, from_sg = local.sg_worker, cidr = null, proto = "tcp", from = 9100, to = 9100, desc = "node-exporter (Prometheus)" }
   }
 }
 

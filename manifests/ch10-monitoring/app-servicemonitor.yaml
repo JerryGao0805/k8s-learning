@@ -1,0 +1,16 @@
+# 第 10 章：让 Prometheus 抓示例应用 api 的 /metrics。
+# ServiceMonitor 是 Prometheus Operator 的 CRD：选中哪些 Service、抓哪个端口、什么路径，
+# operator 会把它翻译成 Prometheus 的抓取配置。
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+  namespace: app
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api      # 选中 api 这个 Service
+  endpoints:
+    - port: http                       # Service 里名为 http 的端口
+      path: /metrics
+      interval: 30s

@@ -7,7 +7,7 @@
 #
 # 原理：
 #   Mac:16443 ──(SSM 加密通道)──► 某个节点 ──► api.k8s.internal:6443 ──► apiserver
-#   （api.k8s.internal 现在直接解析到 cp-1；第 11 章起解析到内网 NLB）
+#   （api.k8s.internal 现在直接解析到 cp-1；第 06 章起解析到 3 个 CP；LB 限制解除后解析到内网 NLB）
 #
 # api.k8s.internal 只在 VPC 里能解析，所以是"由节点帮我们去连"。
 # 这个终端窗口要保持打开；按 Ctrl-C 关闭隧道。

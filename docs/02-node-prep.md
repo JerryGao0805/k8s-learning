@@ -202,7 +202,7 @@ sudo journalctl -k --since "2 min ago" | grep -i -m2 'out of memory'
 
 python 被直接杀掉（`Killed`），退出码 **137** = 128 + 9，9 就是 SIGKILL 信号。内核日志里能看到 `Memory cgroup out of memory: Killed process ... (python3)`。
 
-> 💡 以后你在 Pod 里写 `resources.limits.memory: 512Mi`，最终就是变成了这样一个 `memory.max` 文件。超了，进程就被 OOM kill，Pod 状态里会显示 `OOMKilled`（第 09 章会亲眼看到）。
+> 💡 以后你在 Pod 里写 `resources.limits.memory: 512Mi`，最终就是变成了这样一个 `memory.max` 文件。超了，进程就被 OOM kill，Pod 状态里会显示 `OOMKilled`（第 15 章会亲眼看到）。
 
 ---
 
@@ -403,7 +403,7 @@ cat /proc/$PID/cgroup
 几个值得注意的地方：
 
 - **shim 的父进程是 1 号进程，不是 containerd**。shim 启动后会"脱离"containerd 独立运行，所以 containerd 重启、升级时，正在跑的容器不受影响。「💥 演练 1」会亲手验证。
-- **cgroup 是 `/default/demo`**。`ctr` 不经过 CRI，所以刚才在 CRI 插件里设的 `SystemdCgroup` 对它不起作用。kubelet 创建的 Pod 会出现在 `/kubepods.slice/...` 下面，第 06 章再看。
+- **cgroup 是 `/default/demo`**。`ctr` 不经过 CRI，所以刚才在 CRI 插件里设的 `SystemdCgroup` 对它不起作用。kubelet 创建的 Pod 会出现在 `/kubepods.slice/...` 下面，第 12 章再看。
 
 清理掉这个容器：
 
@@ -509,9 +509,9 @@ ctr images rm public.ecr.aws/docker/library/busybox:1.37    # 清理实验用的
 
 > 📝 **同一个词，两个意思**：这里的"命名空间"是 **containerd 自己的概念**，用来把不同用户的容器和镜像分开存放。它跟 Linux 内核的 namespace（隔离进程的那个）毫无关系。K8s 通过 CRI 创建的东西都在 `k8s.io` 里，`crictl` 也只看 `k8s.io`；`ctr` 默认看 `default`。
 
-### 步骤 10：安装 ECR 凭证插件（第 12 章才用到）
+### 步骤 10：安装 ECR 凭证插件（第 08 章才用到）
 
-第 12 章，我们会把自己写的应用镜像推到 **ECR**（AWS 的私有镜像仓库）。kubelet 从私有仓库拉镜像需要密码，而 **ecr-credential-provider** 会用节点的 IAM 角色，向 ECR 换一个 12 小时有效的临时密码交给 kubelet。现在先装好，从第 03 章起，kubelet 一启动就带着它。
+第 08 章，我们会把自己写的应用镜像推到 **ECR**（AWS 的私有镜像仓库）。kubelet 从私有仓库拉镜像需要密码，而 **ecr-credential-provider** 会用节点的 IAM 角色，向 ECR 换一个 12 小时有效的临时密码交给 kubelet。现在先装好，从第 03 章起，kubelet 一启动就带着它。
 
 🖥️ **cp-1（root）：**
 
@@ -584,7 +584,7 @@ exit
 
 ## 🛠 动手 C：用脚本准备 worker-1、worker-2（Mac）
 
-cp-1 上的 8 个步骤，在 worker-1、worker-2 上还要再做一遍，第 11 章加新节点时又要做 3 遍。手敲既慢又容易漏，正确的做法是把它写成**脚本**，一次推到多台机器上执行。
+cp-1 上的 8 个步骤，在 worker-1、worker-2 上还要再做一遍，第 06 章加新节点时又要做 3 遍。手敲既慢又容易漏，正确的做法是把它写成**脚本**，一次推到多台机器上执行。
 
 ### 先认识 SSM Run Command
 
@@ -730,7 +730,7 @@ kubelet 的启动命令由 4 组参数拼成：
 
 containerd 配置里的 `sandbox` 就是"用哪个 pause 镜像"。如果它和 kubeadm 预拉的版本不一致，containerd 会在第一次创建 Pod 时再去下载另一个版本，在不能联网的环境里就会直接失败。
 
-更麻烦的是，搭配 containerd 2.x 时，kubeadm 检测不到这种不一致，**也不会给出任何警告**。所以只能我们自己保证两边一致。第 06 章会用 `crictl pods` 亲眼看到 pause 容器。
+更麻烦的是，搭配 containerd 2.x 时，kubeadm 检测不到这种不一致，**也不会给出任何警告**。所以只能我们自己保证两边一致。第 12 章会用 `crictl pods` 亲眼看到 pause 容器。
 
 ### 4. `apt-mark hold`：为什么要锁定版本？
 
@@ -739,7 +739,7 @@ Ubuntu 默认开启了 **unattended-upgrades**，每天自动安装 Ubuntu 官�
 - **containerd** 属于 Ubuntu 官方源。不锁定的话，它可能在某天夜里被自动升级并重启。
 - **kubelet、kubeadm、kubectl** 来自 pkgs.k8s.io，不在自动更新范围内。但只要你哪天顺手 `apt upgrade` 一下，它们就会被升级。
 
-K8s 对组件之间的版本差有严格要求（例如 kubelet 不能比 apiserver 新），升级必须按顺序来：先升控制面，再逐台腾空节点、升级、恢复。这些是第 18 章的内容。`hold` 把"意外升级"的路堵死了。
+K8s 对组件之间的版本差有严格要求（例如 kubelet 不能比 apiserver 新），升级必须按顺序来：先升控制面，再逐台腾空节点、升级、恢复。这些是第 22 章的内容。`hold` 把"意外升级"的路堵死了。
 
 代价是：containerd 的安全更新要我们自己挑时间来做。
 
@@ -845,7 +845,7 @@ exit
 
 容器共用宿主机的内核，本质上就是宿主机上的进程；虚拟机有自己的内核，跑在模拟出来的硬件上。
 
-所以容器里的程序是直接由宿主机的 CPU 执行的。amd64 的程序在 arm64 的 CPU 上根本无法执行，会报 `exec format error`。这就是为什么第 12 章构建镜像时要构建 arm64 版本，第 17 章的 CI 要用 arm64 的 runner。
+所以容器里的程序是直接由宿主机的 CPU 执行的。amd64 的程序在 arm64 的 CPU 上根本无法执行，会报 `exec format error`。这就是为什么第 08 章构建镜像时要构建 arm64 版本，第 24 章的 CI 要用 arm64 的 runner。
 </details>
 
 **2. 如果忘了把 `SystemdCgroup` 改成 `true`，第 03 章的 `kubeadm init` 会报错吗？**
@@ -875,7 +875,7 @@ containerd 用自己的"命名空间"把数据分开存放。K8s（经过 CRI）
 - 用一个临时的 bootstrap token 换来 kubelet 的正式证书（TLS bootstrap）；
 - 生成 kubelet 的配置文件，再重启 kubelet。
 
-第 18 章升级集群时，worker 上也要执行 `kubeadm upgrade node`。kubeadm 是"节点的安装和维护工具"，不只是控制面的。
+第 22 章升级集群时，worker 上也要执行 `kubeadm upgrade node`。kubeadm 是"节点的安装和维护工具"，不只是控制面的。
 </details>
 
 **5. `run-on-nodes.sh` 能以 root 身份在节点上执行任意脚本，听起来很危险。谁能做这件事？怎么限制？怎么审计？**

@@ -1,0 +1,54 @@
+# 第 10 章：Loki 的 Helm values（chart 7.6.0）
+# 单体模式（SingleBinary）：一个 Pod 干所有活，日志存在它自己的 EBS 卷上。
+# 生产环境会用分布式模式 + S3，实验环境用不着。
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false            # 单租户，不需要 X-Scope-OrgID 头
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 168h       # 日志保留 7 天
+  compactor:
+    retention_enabled: true      # 由 compactor 负责删除过期日志
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    size: 10Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# 其他模式的组件全部关掉
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+
+# 缓存（memcached）、自测工具都不要，省内存
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false

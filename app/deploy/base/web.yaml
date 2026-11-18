@@ -1,0 +1,84 @@
+# ---------------------------------------------------------------
+# web：nginx 提供的静态前端页面。Deployment（2 个副本）+ Service
+# ---------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: web
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101            # nginx-unprivileged 镜像里的 nginx 用户
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: web              # 占位名：overlays/lab 里替换成 ECR 地址
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # 根文件系统只读，但 nginx 要写 pid 文件和临时文件，给它一个可写的 /tmp
+            - name: tmp
+              mountPath: /tmp
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5        # 原因同 api：先等转发规则更新，再让 nginx 退出
+      volumes:
+        - name: tmp
+          emptyDir: {}            # 随 Pod 创建、随 Pod 删除的临时目录
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

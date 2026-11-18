@@ -1,0 +1,5 @@
+# 应用的所有资源都放在 app 命名空间里，和集群组件（kube-system 等）隔开。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app

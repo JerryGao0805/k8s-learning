@@ -1,0 +1,42 @@
+# 第 10 章：kube-prometheus-stack 的 Helm values（chart 93.4.0）
+# 一次装好：Prometheus Operator、Prometheus、Alertmanager、Grafana、node-exporter、kube-state-metrics，
+# 外加一套现成的告警规则和 dashboard。只写和默认值不同的部分。
+#
+# 控制面组件（etcd 2381、controller-manager 10257、scheduler 10259、kube-proxy 10249）的抓取用默认值就行：
+# 第 03 章已经把它们的监听地址改成 0.0.0.0，第 10 章补上了安全组规则。
+
+grafana:
+  # 管理员账号密码放在 Secret grafana-admin 里（由 secrets/grafana-admin-password 创建，不进 git）
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsTimezone: browser      # dashboard 按浏览器所在时区显示时间
+  # 除了自带的 Prometheus 数据源，再加一个 Loki（日志）
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki-gateway.monitoring.svc.cluster.local
+
+prometheus:
+  prometheusSpec:
+    retention: 7d              # 指标保留 7 天
+    retentionSize: 18GB        # 或者占满 18GB（盘是 20Gi），先到哪个算哪个
+    # 默认只认带本 release 标签的 ServiceMonitor / PodMonitor / 规则；改成 false = 集群里所有的都认
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 20Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi

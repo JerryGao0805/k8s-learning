@@ -10,12 +10,15 @@ autostop_enabled  = true
 autostop_cron     = "cron(0 2 * * ? *)" # 每天 02:00
 autostop_timezone = "America/New_York"
 
-# 节点数量：现在是 1 个 control plane + 2 个 worker；第 11 章改成 3 + 3
+# 节点数量：先 1 个 control plane + 2 个 worker；第 06 章改成 3 + 3
 cp_count     = 1
 worker_count = 2
 
-# 第 11 章才打开：在 control plane 前面放内网 NLB（账号要先能创建负载均衡，见第 01 章附录）
+# LB 限制解除后才打开：在 control plane 前面放内网 NLB（账号要先能创建负载均衡，见第 01 章附录）
 # enable_api_lb = true
 
-# 第 13 章才用到：你的公网 IP（/32）。可以用 ../scripts/update-my-ip.sh 自动填
+# 第 09 章才用到：你的公网 IP（/32）。可以用 ../scripts/update-my-ip.sh 自动填
 # my_ip_cidr = "203.0.113.10/32"
+
+# 第 09 章：公网入口（NAT 实例绑 EIP + DNAT 到 worker）。打开前先填好 my_ip_cidr
+# enable_public_ingress = true

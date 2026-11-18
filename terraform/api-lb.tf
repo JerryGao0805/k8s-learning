@@ -6,7 +6,7 @@
 #   kubelet / kubectl / kube-proxy ──► api.k8s.internal:6443
 #                                       │  (Route53 私有托管区，只有 VPC 内能解析)
 #                                       ▼
-#   ┌─ enable_api_lb = false（第 01~10 章）──┐   ┌─ enable_api_lb = true（第 11 章起）──┐
+#   ┌─ enable_api_lb = false（现在）─────────┐   ┌─ enable_api_lb = true（LB 解除后）───┐
 #   │ A 记录直接写 control plane 的私网 IP    │   │ alias 记录指向内网 NLB                 │
 #   │                                        │   │            内网 NLB :6443               │
 #   │   api.k8s.internal → 10.0.10.11 (cp-1) │   │          ┌─────┼─────┐                  │
@@ -20,7 +20,8 @@
 #
 # 为什么只有 1 个 control plane 时不建 NLB？
 #   后端只有一台机器，NLB 起不到分流和容灾的作用，却每月固定收约 $16。
-#   所以先让域名直连 cp-1，第 11 章扩成 3 个 control plane 时再把 enable_api_lb 打开。
+#   所以先让域名直连 control plane 的 IP（第 06 章扩成 3 个后就是 DNS 轮询），
+#   等账号能创建负载均衡后，再把 enable_api_lb 打开。
 # ============================================================
 
 resource "aws_lb" "api" {

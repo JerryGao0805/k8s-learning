@@ -14,8 +14,12 @@
 | `./scripts/ssm.sh <节点名>` | 登录节点：`cp-1`、`worker-1`、`nat` ... |
 | `./scripts/run-on-nodes.sh <脚本> <节点>...` | 用 SSM Run Command 把脚本推到节点上以 root 执行，例如 `scripts/node/check-node.sh cp-1 worker-1 worker-2` |
 | `./scripts/api-tunnel.sh` | 打开 Mac → apiserver 的隧道（第 05 章起使用） |
+| `./scripts/make-mac-kubeconfig.sh` | 生成 Mac 用的 `~/.kube/k8s-lab.yaml`（私钥不离开 Mac；证书 1 年，到期重跑） |
+| `export KUBECONFIG=~/.kube/k8s-lab.yaml` | 让这个终端里的 kubectl / helm 指向实验集群（隧道要开着） |
 | `./scripts/autostop.sh status\|on\|off` | 每晚自动关机的开关 |
-| `./scripts/update-my-ip.sh` | 把当前公网 IP 写进 tfvars（第 13 章起使用） |
+| `./scripts/update-my-ip.sh` | 把当前公网 IP 写进 tfvars（第 09 章起使用） |
+| `./scripts/cleanup-orphans.sh [--delete]` | 列出（删除）CSI 动态创建的 EBS 卷；**`terraform destroy` 之前先跑**（第 07 章） |
+| `./scripts/nat-ingress.sh [off]` | 在 NAT 实例上配置（删除）公网入口的 DNAT 规则；worker 增减后重跑（第 09 章） |
 
 ## Terraform（在 `terraform/` 目录执行）
 
@@ -36,13 +40,13 @@
 ```bash
 aws sts get-caller-identity                     # 我是谁
 
-# 查看 api.k8s.internal 的 DNS 记录（现在指向 cp-1 的 IP；第 11 章起指向 NLB）
+# 查看 api.k8s.internal 的 DNS 记录（现在是 cp-1 的 IP；第 06 章起列出 3 个 CP 的 IP；LB 限制解除后指向 NLB）
 ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name k8s.internal \
   --query "HostedZones[?Name=='k8s.internal.'].Id | [0]" --output text)
 aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
   --query "ResourceRecordSets[?Name=='api.k8s.internal.']" --output table
 
-# 查看 NLB 目标健康状态（第 11 章打开 enable_api_lb 之后）
+# 查看 NLB 目标健康状态（打开 enable_api_lb 之后）
 aws elbv2 describe-target-health \
   --target-group-arn "$(terraform -chdir=terraform output -raw api_target_group_arn)" \
   --query 'TargetHealthDescriptions[].{Target:Target.Id,State:TargetHealth.State,Reason:TargetHealth.Reason}' \
@@ -109,6 +113,7 @@ aws ec2 describe-route-tables --filters "Name=tag:Name,Values=k8s-lab-private-rt
 | `kubectl get events -A --field-selector reason=FailedScheduling` | 调度失败的原因 |
 | `kubectl get <对象> -o yaml` / `-o jsonpath='{.spec.podCIDR}'` | 看对象的完整定义 / 取某个字段 |
 | `kubectl auth whoami` | 在集群眼里我是谁（用户名、组） |
+| `kubeadm token create --ttl 1h --print-join-command` | 在 control plane 上生成 join 命令（第 05 章） |
 | `kubectl get csr` | 证书签名请求列表 |
 | `kubectl get csr --field-selector spec.signerName=kubernetes.io/kubelet-serving -o name \| xargs kubectl certificate approve` | 批准所有 kubelet 服务端证书申请（先核对内容） |
 | `kubectl get --raw='/readyz?verbose'` | apiserver 的各项健康检查 |
@@ -128,3 +133,44 @@ aws ec2 describe-route-tables --filters "Name=tag:Name,Values=k8s-lab-private-rt
 | `curl -s http://127.0.0.1:10248/healthz` | kubelet 健康检查 |
 | `crictl exec $(crictl ps --name etcd -q) etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key member list -w table` | 在 etcd 容器里执行 etcdctl（第 03 章步骤 12 有简化用的函数） |
 | `kubeadm reset -f` | 撤销 init/join（危险！会删掉证书和控制面） |
+
+## Calico 与 Pod 网络（第 04 章，在 cp-1 上以 root 执行）
+
+| 命令 | 作用 |
+|---|---|
+| `kubectl get tigerastatus` | Calico 各部分是否就绪（apiserver、calico、ippools、tiers） |
+| `kubectl -n calico-system get pods -o wide` | Calico 的组件 |
+| `kubectl -n calico-system logs ds/calico-node -c calico-node --tail=30` | Felix 的日志（calico-node 不 Ready 时先看这里） |
+| `kubectl get ippools -o wide` | IP 池：网段、VXLAN/IPIP 模式、是否 NAT |
+| `kubectl get ipamblocks` / `kubectl get blockaffinities` | 每个节点领了哪些 /26 IP 块 |
+| `kubectl patch installation default --type=json -p '[{"op":"replace","path":"/spec/calicoNetwork/ipPools/0/natOutgoing","value":"Enabled"}]'` | 改 IP 池要改 Installation（直接改 IPPool 会被 operator 改回去） |
+| `crictl info -o go-template --template '{{range .status.conditions}}{{.type}}={{.status}} {{.message}}{{"\n"}}{{end}}'` | containerd 的 RuntimeReady / NetworkReady |
+| `ls -la /etc/cni/net.d` / `ls /opt/cni/bin` | CNI 配置 / CNI 插件（只删文件，别删目录） |
+| `tail /var/log/calico/cni/cni.log` | CNI 插件的调用记录（ADD/DEL、分到的 IP） |
+| `ip route` / `ip link \| grep -A1 cali` | Pod 的 /32 路由、blackhole 路由；宿主机侧的 veth |
+| `nsenter -t $(crictl inspectp -o go-template --template '{{.info.pid}}' $(crictl pods --name <Pod> -q)) -n ip addr` | 不经过 K8s，直接进 Pod 的 network namespace 执行命令 |
+| `ip -d link show vxlan.calico` | VXLAN 隧道设备的参数（VNI、端口、MTU） |
+| `iptables -t nat -S cali-nat-outgoing` | Pod 访问集群外时的 MASQUERADE 规则 |
+
+## Helm 与存储（第 07 章起，在 Mac 上执行）
+
+| 命令 | 作用 |
+|---|---|
+| `helm repo add <名字> <URL>` / `helm repo update` | 添加 / 刷新 chart 仓库 |
+| `helm search repo <仓库>/<chart> --versions \| head` | 看有哪些版本 |
+| `helm show values <仓库>/<chart> --version <版本>` | 看 chart 的全部默认参数 |
+| `helm upgrade --install <名字> <chart> --version <版本> -n <命名空间> -f values.yaml` | 安装或升级（改了 values 再跑一遍） |
+| `helm list -A` | 装了哪些 release |
+| `helm get values <名字> -n <命名空间>` | 这个 release 用了哪些自定义参数 |
+| `kubectl get storageclass` / `kubectl get pvc,pv -A` | 存储规格 / 申请单和实际的盘 |
+| `kubectl get volumeattachment` | 哪块盘挂在哪个节点上 |
+
+## 监控（第 10 章起，在 Mac 上执行）
+
+| 命令 | 作用 |
+|---|---|
+| `kubectl top nodes` / `kubectl top pods -A` | 此刻的 CPU / 内存用量（metrics-server） |
+| `kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090` | Prometheus 网页：`http://localhost:19090` |
+| `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 13000:80` | Grafana 网页：`http://localhost:13000`（用户 admin，密码 `cat secrets/grafana-admin-password`） |
+| `curl -s localhost:19090/api/v1/targets?state=active \| jq -r '.data.activeTargets[] \| "\(.labels.job)\t\(.health)"' \| sort \| uniq -c` | 所有抓取目标是否 up |
+| `kubectl -n monitoring logs ds/alloy -c alloy --tail=20` | 日志收集器有没有报错 |

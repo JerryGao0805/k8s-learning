@@ -5,7 +5,7 @@
 #
 # 按角色拆分权限（最小权限原则）：
 #   nat           : 只需要 SSM（能被你登录）
-#   control plane : SSM + 拉 ECR 镜像 + 管理 EBS 卷（第 10 章 EBS CSI controller 固定调度到这里）
+#   control plane : SSM + 拉 ECR 镜像 + 管理 EBS 卷（第 07 章 EBS CSI controller 固定调度到这里）
 #   worker        : SSM + 拉 ECR 镜像
 # ============================================================
 
@@ -28,7 +28,7 @@ locals {
     control-plane = [
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly", # 只能拉镜像，不能推
-      "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicyV2",         # 第 10 章 EBS CSI 用
+      "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicyV2",         # 第 07 章 EBS CSI 用
     ]
     worker = [
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",

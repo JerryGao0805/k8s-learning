@@ -14,7 +14,7 @@ resource "aws_instance" "nat" {
   ami                         = data.aws_ssm_parameter.ubuntu_arm64.insecure_value
   instance_type               = var.nat_instance_type
   subnet_id                   = aws_subnet.public[0].id
-  associate_public_ip_address = true # 需要公网 IP 才能替别人上网（stop/start 后这个 IP 会变，没关系）
+  associate_public_ip_address = true # 需要公网 IP 才能替别人上网（stop/start 后会变；第 09 章绑 EIP 后固定，见 ingress.tf）
   vpc_security_group_ids      = [aws_security_group.nat.id]
   iam_instance_profile        = local.instance_profile_nat
 

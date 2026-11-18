@@ -1,0 +1,12 @@
+# 第 09 章：cert-manager 的 Helm values（chart v1.21.3）
+
+crds:
+  enabled: true          # 由 chart 安装 cert-manager 的 CRD（Certificate、ClusterIssuer……）
+
+# 打开 Gateway API 支持：在 Gateway 上加注解 cert-manager.io/cluster-issuer，
+# cert-manager 就会按它的 https listener 自动申请证书，存进 listener 引用的 Secret。
+# 要求 Gateway API 的 CRD 已经装好（Envoy Gateway 装的），所以 cert-manager 要在 Envoy Gateway 之后装。
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true

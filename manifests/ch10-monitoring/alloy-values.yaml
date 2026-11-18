@@ -1,0 +1,87 @@
+# 第 10 章：Grafana Alloy 的 Helm values（chart 1.16.0）
+# 每个节点跑一个 Alloy（DaemonSet），读本节点 /var/log/pods 下的容器日志，打上标签发给 Loki。
+
+controller:
+  type: daemonset
+  tolerations:                   # control plane 上的日志（apiserver、etcd……）也要收
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+alloy:
+  mounts:
+    varlog: true                 # 把宿主机的 /var/log 挂进来（只读）
+  extraEnv:
+    - name: NODE_NAME            # 本 Pod 所在节点的名字，下面用来"只收本节点的 Pod"
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  configMap:
+    content: |
+      // 1. 从 apiserver 找出本节点上的所有 Pod
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("NODE_NAME")
+        }
+      }
+
+      // 2. 给每个容器的日志打标签，并算出日志文件的路径：
+      //    /var/log/pods/<命名空间>_<Pod 名>_<UID>/<容器名>/<序号>.log
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+      }
+
+      local.file_match "pods" {
+        path_targets = discovery.relabel.pods.output
+      }
+
+      // 3. 读文件
+      loki.source.file "pods" {
+        targets    = local.file_match.pods.targets
+        forward_to = [loki.process.pods.receiver]
+      }
+
+      // 4. 拆掉 containerd 的日志前缀（时间戳、stdout/stderr、F/P 标志），只留原始日志行
+      loki.process "pods" {
+        stage.cri {}
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // 5. 发给 Loki
+      loki.write "default" {
+        endpoint {
+          url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        }
+      }

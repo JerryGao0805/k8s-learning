@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------
+# api：Go 写的后端。ConfigMap（配置）+ Deployment（2 个副本）+ Service（集群内入口）
+#
+# 注意：数据库密码来自 Secret postgres-auth，它不在 git 里，部署前要手动创建：
+#   kubectl -n app create secret generic postgres-auth --from-literal=password=...
+# ---------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  labels:
+    app.kubernetes.io/name: api
+data:
+  # pgx 和 psql 一样读这些标准 libpq 环境变量
+  PGHOST: postgres          # 就是下面 postgres Service 的名字，由集群 DNS 解析
+  PGDATABASE: app
+  PGUSER: app
+  REDIS_ADDR: redis:6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+    spec:
+      # 尽量把两个副本放到不同节点上；实在放不开也照样调度（ScheduleAnyway），不会卡在 Pending
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532          # distroless:nonroot 镜像里的用户
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault    # 用容器运行时默认的 seccomp 规则，屏蔽危险的系统调用
+      containers:
+        - name: api
+          image: api              # 占位名：overlays/lab 里的 images: 会替换成 ECR 地址和版本号
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: api-config  # 上面 ConfigMap 里的每个 key 都变成一个环境变量
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-auth   # 手动创建的 Secret，不在 git 里
+                  key: password
+          # 启动探针：启动阶段（可能在等数据库）最多给 5s x 30 = 150 秒；
+          # 它成功之前，下面的存活 / 就绪探针都不会开始检查。
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          # 存活探针：连续 3 次失败 -> kubelet 重启容器
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # 就绪探针：失败 -> 从 Service 后端摘掉，不再分流量过来（但不重启）
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          resources:
+            requests:             # 调度时按这个预留资源
+              cpu: 50m
+              memory: 64Mi
+            limits:               # 内存超过 256Mi 会被 OOMKill；不设 CPU limit，避免被限流变慢
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # api 不写本地文件，根文件系统可以只读
+            capabilities:
+              drop: ["ALL"]
+          lifecycle:
+            # 删除 Pod 时，"从 Service 摘掉" 和 "发 SIGTERM" 是同时发生的。
+            # 先等 5 秒再发 SIGTERM，让各节点的转发规则先更新，避免正在路上的请求失败。
+            preStop:
+              sleep:
+                seconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 80                # Service 对外的端口
+      targetPort: http        # 转发到容器里名为 http 的端口（8080）

@@ -5,7 +5,7 @@ output "vpc_id" {
 }
 
 output "nat_instance" {
-  description = "NAT 实例（公网 IP 在 stop/start 后会变）"
+  description = "NAT 实例（没绑 EIP 时公网 IP 在 stop/start 后会变；第 09 章起固定为 EIP）"
   value = {
     id         = aws_instance.nat.id
     private_ip = aws_instance.nat.private_ip
@@ -48,4 +48,9 @@ output "ssm_shell_document" {
 output "ubuntu_ami_id" {
   description = "本次创建实例用的 Ubuntu 24.04 arm64 AMI"
   value       = data.aws_ssm_parameter.ubuntu_arm64.insecure_value
+}
+
+output "ingress_public_ip" {
+  description = "公网入口的 EIP（第 09 章；enable_public_ingress = false 时为 null）。Cloudflare 里 *.lab 的 A 记录指向它"
+  value       = one(aws_eip.ingress[*].public_ip)
 }

@@ -44,7 +44,7 @@ resource "aws_instance" "control_plane" {
   metadata_options {
     http_tokens = "required" # 只允许 IMDSv2
     # hop limit = 数据包能经过几"跳"。容器里的进程访问 IMDS 要多一跳，所以设成 2。
-    # 只在 control plane 上这么设：第 10 章的 EBS CSI controller（跑在 Pod 里）
+    # 只在 control plane 上这么设：第 07 章的 EBS CSI controller（跑在 Pod 里）
     # 需要通过 IMDS 拿实例凭证。worker 保持 1，worker 上的 Pod 拿不到实例凭证。
     http_put_response_hop_limit = 2
   }

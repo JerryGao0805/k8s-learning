@@ -1,0 +1,61 @@
+# 第 09 章：Envoy 代理怎么部署（EnvoyProxy），以及使用这套部署方式的 GatewayClass。
+# 和域名无关；Gateway 本身在 gateway.yaml 里。
+
+# EnvoyProxy：Envoy Gateway 的 CRD，描述"为每个 Gateway 起的 Envoy 长什么样"
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: nodeport
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: 2
+        pod:
+          # 两个副本尽量放到不同节点上
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: envoy
+      envoyService:
+        # 没有云负载均衡器，用 NodePort：NAT 实例把 80/443 DNAT 到每台 worker 的 30080/30443（scripts/nat-ingress.sh）
+        type: NodePort
+        # Envoy Gateway 默认是 Local（只转给本节点上的 Envoy）。DNAT 可能转到一台没有 Envoy 副本的 worker，
+        # 所以改成 Cluster：任何 worker 收到都能转给集群里的 Envoy。
+        externalTrafficPolicy: Cluster
+        # 把 NodePort 固定下来（默认是 30000-32767 里随机分配），NAT 上的 DNAT 规则才能写死。
+        # 按 port 合并进 Envoy Gateway 生成的端口。name / targetPort 和它生成的保持一致（http-80 → 10080，
+        # https-443 → 10443），这样即使 Gateway 暂时只有一个 listener，合并出来的 Service 也是合法的。
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-80
+                  protocol: TCP
+                  port: 80
+                  targetPort: 10080
+                  nodePort: 30080
+                - name: https-443
+                  protocol: TCP
+                  port: 443
+                  targetPort: 10443
+                  nodePort: 30443
+---
+# GatewayClass：Gateway 的"类型"。controllerName 表示由 Envoy Gateway 负责实现，parametersRef 指向上面的部署方式
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: nodeport
+    namespace: envoy-gateway-system

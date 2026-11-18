@@ -1,0 +1,22 @@
+# 第 09 章：external-dns 的 Helm values（chart 1.23.0）
+# 它盯着集群里的 HTTPRoute：看到 hostnames 里有 app.lab.<域名>，就去 Cloudflare 建一条 A 记录，
+# 指向 Gateway 上 external-dns.kubernetes.io/target 注解写的 IP（NAT 实例的 EIP）。
+#
+# 域名不写在这里（不进 git），安装时用 --set "domainFilters={<域名>}" 传进来。
+
+provider:
+  name: cloudflare
+
+env:
+  - name: CF_API_TOKEN               # Cloudflare token，放在 external-dns 命名空间的 Secret 里（不进 git）
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+sources:
+  - gateway-httproute                # 只看 Gateway API 的 HTTPRoute
+
+policy: upsert-only                  # 只增改、不删除。先保守一点，熟悉之后可以改成 sync
+txtOwnerId: k8s-lab                  # 每条记录旁边会有一条 TXT 记录标明"归 k8s-lab 管"，不会动别人建的记录
+triggerLoopOnEvent: true             # HTTPRoute 一变就立刻同步，不用等下一个 1 分钟周期

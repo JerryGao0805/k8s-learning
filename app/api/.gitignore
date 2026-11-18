@@ -1,0 +1,2 @@
+# 本地 go build 产生的二进制，不进 git
+/notes-api

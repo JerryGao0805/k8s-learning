@@ -40,7 +40,7 @@
 | **kube-scheduler** | 发现"有 Pod 还没分配节点"，就挑一个合适的节点，把结果写回 apiserver | 排班员 |
 | **kube-controller-manager** | 几十个"控制器"的合集，每个负责一类对象，不停地把"实际状态"往"期望状态"拉 | 一群对账员 |
 | **kubelet** | 每个节点上的代理人（第 02 章装的），领任务、跑容器、汇报状态 | 各地分店店长 |
-| **kube-proxy** | 每个节点上，把 Service 的虚拟 IP 翻译成真实 Pod 的地址（第 08 章细讲） | 电话总机 |
+| **kube-proxy** | 每个节点上，把 Service 的虚拟 IP 翻译成真实 Pod 的地址（第 14 章细讲） | 电话总机 |
 | **CoreDNS** | 集群内部的 DNS，让 Pod 能用名字找到 Service | 通讯录 |
 
 **最重要的一条规则：只有 apiserver 能碰 etcd，其他所有组件都只和 apiserver 对话。** 组件之间从不直接通信，而是都去 apiserver 那里"看公告、写公告"。
@@ -53,7 +53,7 @@ K8s 的工作方式和你熟悉的"执行命令"不一样：
 - 控制器在一个无限循环里不停地对账：看看**实际状态**（现在有几个）→ 和期望比 → 少了就补、多了就删 → 再看……
 - 某个 nginx 挂了？不需要谁"处理故障"，下一轮对账自然就把它补回来。
 
-这个"声明期望 + 不停对账"的模式贯穿整个 K8s，第 07 章会专门讲。今天你会在几个地方看到它的影子。
+这个"声明期望 + 不停对账"的模式贯穿整个 K8s，第 13 章会专门讲。今天你会在几个地方看到它的影子。
 
 ---
 
@@ -89,7 +89,7 @@ K8s 里几乎所有通信都是**双向 TLS（mTLS）**：不光客户端要验�
                         └─ 组（Group）                └─ 用户名（User）
 ```
 
-apiserver 只要验证"这张证书是我信任的 CA 签的"，就知道你是谁、属于哪个组，然后再按组和用户名去查权限（RBAC，第 16 章细讲）。K8s **没有用户数据库**，谁手里有 CA 签过的证书，谁就是证书上写的那个人。
+apiserver 只要验证"这张证书是我信任的 CA 签的"，就知道你是谁、属于哪个组，然后再按组和用户名去查权限（RBAC，第 21 章细讲）。K8s **没有用户数据库**，谁手里有 CA 签过的证书，谁就是证书上写的那个人。
 
 kubeadm 会建 **3 个 CA**，外加一对密钥：
 
@@ -97,7 +97,7 @@ kubeadm 会建 **3 个 CA**，外加一对密钥：
 |---|---|---|
 | `ca`（集群 CA） | apiserver、kubelet、admin、controller-manager、scheduler…… | 集群里绝大多数身份 |
 | `etcd/ca` | etcd 自己、apiserver 访问 etcd 用的客户端证书 | etcd 单独一套，和集群 CA 隔离 |
-| `front-proxy-ca` | apiserver 转发请求给扩展 API 时用 | 第 14 章 metrics-server 会用到 |
+| `front-proxy-ca` | apiserver 转发请求给扩展 API 时用 | 第 10 章 metrics-server 会用到 |
 | `sa.key` / `sa.pub` | 不是 CA，是一对密钥 | 给 ServiceAccount（Pod 的身份）签发 token |
 
 > 📌 先记住一点：**kubelet 手里有两张证书**。一张是**客户端证书**，用来向 apiserver 证明"我是节点 ip-10-0-10-11"（步骤 8）；另一张是**服务端证书**，apiserver 反过来访问 kubelet（比如查看容器日志）时用来证明"我真的是这个节点"（步骤 15）。
@@ -151,13 +151,13 @@ apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 clusterName: k8s-lab
 kubernetesVersion: v1.36.6                  # 固定版本，和第 02 章预拉的镜像一致
-controlPlaneEndpoint: api.k8s.internal:6443 # 集群的"门牌号"，第 11 章扩 HA 全靠它
+controlPlaneEndpoint: api.k8s.internal:6443 # 集群的"门牌号"，第 06 章扩 HA 全靠它
 networking:
   podSubnet: 192.168.0.0/16                 # Pod 的 IP 池，第 04 章 Calico 用同一个
   serviceSubnet: 10.96.0.0/12               # Service 的 IP 池（就是默认值，写出来固定住）
 controllerManager:
   extraArgs:
-    - name: bind-address                    # 指标端口对外监听，第 14 章 Prometheus 要来抓
+    - name: bind-address                    # 指标端口对外监听，第 10 章 Prometheus 要来抓
       value: 0.0.0.0
 scheduler:
   extraArgs:
@@ -175,8 +175,8 @@ serverTLSBootstrap: true                    # kubelet 的 HTTPS 证书由集群 
 ---
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
-mode: iptables                              # 现在就是默认值，固定住，第 08 章要看它生成的规则
-metricsBindAddress: 0.0.0.0:10249           # 同样是给第 14 章抓指标用
+mode: iptables                              # 现在就是默认值，固定住，第 14 章要看它生成的规则
+metricsBindAddress: 0.0.0.0:10249           # 同样是给第 10 章抓指标用
 EOF
 ```
 
@@ -194,12 +194,12 @@ EOF
 |---|---|---|
 | `kubernetesVersion: v1.36.6` | 固定住 | 不写的话，kubeadm 会上网查"最新稳定版"，可能装成比预拉镜像更新的版本 |
 | `clusterName: k8s-lab` | 改默认值 | 默认叫 `kubernetes`。这个名字会出现在 kubeconfig 里 |
-| `controlPlaneEndpoint` | 改默认值 | **最重要的一行**。不写的话，所有组件都会记住 cp-1 的 IP；写成域名，第 11 章扩 HA 时只改 DNS（见第 01 章深入原理 1） |
+| `controlPlaneEndpoint` | 改默认值 | **最重要的一行**。不写的话，所有组件都会记住 cp-1 的 IP；写成域名，第 06 章扩 HA 时只改 DNS（见第 01 章深入原理 1） |
 | `podSubnet: 192.168.0.0/16` | 改默认值 | 默认不分配 Pod 网段。必须和第 04 章 Calico 的配置一致，并且不能和 VPC（10.0.0.0/16）重叠 |
 | `serviceSubnet: 10.96.0.0/12` | 固定住 | 就是默认值，显式写出来，免得以后"默认值变了"自己还不知道 |
-| `bind-address`、`listen-metrics-urls`、`metricsBindAddress` | 为第 14 章准备 | 这几个组件的指标端口默认只监听 127.0.0.1，Prometheus 从别的机器上抓不到。现在改好，省得以后去改正在运行的控制面。⚠️ 第 14 章还要给安全组补上对应端口的规则 |
+| `bind-address`、`listen-metrics-urls`、`metricsBindAddress` | 为第 10 章准备 | 这几个组件的指标端口默认只监听 127.0.0.1，Prometheus 从别的机器上抓不到。现在改好，省得以后去改正在运行的控制面。⚠️ 第 10 章还要给安全组补上对应端口的规则 |
 | `serverTLSBootstrap: true` | 改默认值 | 默认 kubelet 用自己签的证书，apiserver 和 metrics-server 无法验证它。打开后由集群 CA 签发（代价是要人工批准，步骤 15） |
-| `mode: iptables` | 固定住 | 现在就是默认值。较新的 nftables 模式已经 GA，默认值将来可能会变，而第 08 章要专门看 iptables 规则 |
+| `mode: iptables` | 固定住 | 现在就是默认值。较新的 nftables 模式已经 GA，默认值将来可能会变，而第 14 章要专门看 iptables 规则 |
 
 **没写的东西**也值得一提：
 
@@ -539,7 +539,7 @@ kubectl -n kube-system get configmap kube-proxy -o jsonpath='{.data.kubeconfig\.
 | cp-1 上的 kubelet | 本机 `10.0.10.11` | 同上（K8s 1.35 起的默认行为） |
 | worker 上的 kubelet（第 05 章） | `api.k8s.internal` | 只能走门牌号 |
 
-第 11 章有 3 个 control plane 时，这张表的意义就出来了：每个 control plane 上的组件只依赖**本机**的 apiserver，不会因为门牌号背后的负载均衡出问题而一起瘫痪。
+第 06 章有 3 个 control plane 之后，这张表的意义就出来了：每个 control plane 上的组件只依赖**本机**的 apiserver，不会因为门牌号背后的负载均衡出问题而一起瘫痪。
 
 ### 步骤 9：`[etcd]` 和 `[control-plane]`：static pod
 
@@ -705,7 +705,7 @@ etcdctl() {
     --key=/etc/kubernetes/pki/etcd/healthcheck-client.key "$@"
 }
 
-etcdctl member list -w table           # 现在只有 1 个成员，第 11 章会变成 3 个
+etcdctl member list -w table           # 现在只有 1 个成员，第 06 章会变成 3 个
 ```
 
 K8s 把所有对象都存在 `/registry/` 下面。数一数，再按类型分组看看：
@@ -724,7 +724,7 @@ etcdctl get /registry --prefix --keys-only | grep '/registry/pods/'
 etcdctl get /registry/namespaces/kube-system | head -c 200 | cat -v; echo
 ```
 
-是一堆乱码：K8s 用二进制的 protobuf 格式存储对象，不是给人直接看的。正常情况下应该通过 apiserver 读数据，第 06 章会再回到这里。
+是一堆乱码：K8s 用二进制的 protobuf 格式存储对象，不是给人直接看的。正常情况下应该通过 apiserver 读数据，第 12 章会再回到这里。
 
 > 🔑 注意刚才用的证书：`healthcheck-client`，一个"做健康检查用"的证书，却能读出 etcd 里的**所有数据**。kubeadm 搭的 etcd 不做细粒度授权，**只要证书是 etcd CA 签的，就能读写一切**，包括所有 Secret。所以 `/etc/kubernetes/pki/etcd/` 是整个集群最需要保护的目录，这也是"只有 apiserver 能碰 etcd"这条规则存在的原因。
 
@@ -740,9 +740,9 @@ kubectl -n kube-system get configmap
 kubectl -n kube-system get configmap kubeadm-config -o yaml | head -30
 ```
 
-`kubeadm-config` 里就是你写的 ClusterConfiguration（补上了默认值）；`kubelet-config` 里是 KubeletConfiguration。第 05 章 worker 执行 `kubeadm join` 时，会从这里读取配置，所以 worker 不需要你再写一遍；第 18 章升级时也会读它。
+`kubeadm-config` 里就是你写的 ClusterConfiguration（补上了默认值）；`kubelet-config` 里是 KubeletConfiguration。第 05 章 worker 执行 `kubeadm join` 时，会从这里读取配置，所以 worker 不需要你再写一遍；第 22 章升级时也会读它。
 
-`[upload-certs] Skipping phase` 被跳过了：它负责把证书加密后存进集群，给新加入的 control plane 用，第 11 章才需要。
+`[upload-certs] Skipping phase` 被跳过了：它负责把证书加密后存进集群，给新加入的 control plane 用，第 06 章才需要。
 
 ```bash
 # [mark-control-plane]：给节点贴的 label 和 taint
@@ -894,7 +894,7 @@ kubectl -n kube-system logs kube-apiserver-ip-10-0-10-11 --tail=5     # 现在�
 - 客户端证书只是证明"我是节点 X"，而节点 X 的身份在加入集群时已经验证过了。
 - 服务端证书上写的是"我的 IP 是 10.0.10.11"。如果自动批准，一个被攻破的节点就可以申请一张写着**别人 IP** 的证书，冒充别的节点。K8s 自己没法验证"这个 IP 真的属于你"，所以默认把这个判断交给人（或者交给你自己写的自动审批程序）。
 
-这么麻烦图什么？第 14 章装 metrics-server 和 Prometheus 时，它们要去访问每个 kubelet。有了集群 CA 签发的证书，它们就能正常验证 kubelet 的身份，而不用加 `--kubelet-insecure-tls` 这种"跳过验证"的参数。
+这么麻烦图什么？第 10 章装 metrics-server 和 Prometheus 时，它们要去访问每个 kubelet。有了集群 CA 签发的证书，它们就能正常验证 kubelet 的身份，而不用加 `--kubelet-insecure-tls` 这种"跳过验证"的参数。
 
 | kubelet 的证书 | 用途 | 谁签发 | 批准方式 |
 |---|---|---|---|
@@ -930,7 +930,7 @@ kubectl -n kube-system logs kube-apiserver-ip-10-0-10-11 --tail=5     # 现在�
 | kubelet 客户端证书 | 1 年 | kubelet 快到期时**自动**申请新的，自动批准 |
 | kubelet 服务端证书 | 1 年 | kubelet 也会自动申请新的，但**又要人工批准一次** |
 
-如果真的过期了：apiserver 的证书过期，所有客户端都会拒绝连接，kubectl 报 `x509: certificate has expired`，整个集群就失联了。这是生产环境里真实发生过很多次的事故，所以每年至少升级一次 K8s（顺带续期证书）是好习惯。第 18 章会做一次完整的检查和续期。
+如果真的过期了：apiserver 的证书过期，所有客户端都会拒绝连接，kubectl 报 `x509: certificate has expired`，整个集群就失联了。这是生产环境里真实发生过很多次的事故，所以每年至少升级一次 K8s（顺带续期证书）是好习惯。第 22 章会做一次完整的检查和续期。
 
 ### 2. admin.conf 和 super-admin.conf
 
@@ -956,7 +956,7 @@ kubectl -n kube-system get lease
 
 `HOLDER` 列就是现在持有锁的那个。持有者要定期续约；如果连不上 apiserver、续约失败，它会**主动退出**，避免出现两个"老大"。kubelet 再把它重新拉起来，RESTARTS 就加 1。
 
-所以 apiserver 重启过（比如做完演练 1、或者机器重启），controller-manager 和 scheduler 的 RESTARTS 增加是**正常的**。第 11 章有 3 个 control plane 时，3 个 controller-manager 里只有 1 个持有锁，另外 2 个待命，这就是它们的高可用方式。
+所以 apiserver 重启过（比如做完演练 1、或者机器重启），controller-manager 和 scheduler 的 RESTARTS 增加是**正常的**。第 06 章有 3 个 control plane 之后，3 个 controller-manager 里只有 1 个持有锁，另外 2 个待命，这就是它们的高可用方式。
 
 ---
 
@@ -1044,7 +1044,7 @@ sleep 15
 kubectl describe node ip-10-0-10-11 | grep -E '^\s+Ready'     # 只剩 cni plugin not initialized 了
 ```
 
-> "停掉 kubelet 会怎样"这个演练放到第 05 章：有了 worker 节点，才能看到节点失联后 Pod 被驱逐的完整过程。
+> "停掉 kubelet 会怎样"这个演练放到第 12 章：那时集群有多个节点，才能看到节点失联后 Pod 被驱逐的完整过程。
 
 做完演练，退出 root：
 
@@ -1061,7 +1061,7 @@ exit
 <details>
 <summary>参考答案</summary>
 
-`10.96.0.1` 是 `default` 命名空间里那个名叫 `kubernetes` 的 Service 的 ClusterIP（Service 网段的第一个地址）。集群里的 Pod 要访问 apiserver（比如第 04 章的 Calico、第 13 章的 cert-manager），用的就是这个地址或者它的域名 `kubernetes.default.svc`。
+`10.96.0.1` 是 `default` 命名空间里那个名叫 `kubernetes` 的 Service 的 ClusterIP（Service 网段的第一个地址）。集群里的 Pod 要访问 apiserver（比如第 04 章的 Calico、第 09 章的 cert-manager），用的就是这个地址或者它的域名 `kubernetes.default.svc`。
 
 它确实不是哪台机器的 IP，而是 kube-proxy 在每个节点上设置的一个"虚拟 IP"，发往它的包会被转到真正的 apiserver（10.0.10.11:6443）。但 TLS 验证看的是客户端**连的是哪个地址**，所以这个虚拟 IP 也必须写进证书。
 </details>
@@ -1071,13 +1071,13 @@ exit
 <details>
 <summary>参考答案</summary>
 
-- **安全**：步骤 12 看到了，etcd 本身几乎不做权限控制，谁有证书谁就能读写一切。把 etcd 藏在 apiserver 后面，所有访问都要经过 apiserver 的认证、授权、准入检查，还能记审计日志（第 16 章）。
+- **安全**：步骤 12 看到了，etcd 本身几乎不做权限控制，谁有证书谁就能读写一切。把 etcd 藏在 apiserver 后面，所有访问都要经过 apiserver 的认证、授权、准入检查，还能记审计日志（第 21 章）。
 - **一致性**：apiserver 会校验每个对象的格式、填上默认值、检查版本冲突。如果每个组件都直接写 etcd，数据很快就乱了。
 - **解耦**：只有 apiserver 知道数据在 etcd 里怎么存。将来换存储格式、升级 etcd，其他组件完全不受影响。
 - **watch 机制**：组件们通过 apiserver 订阅变化，而不是各自去 etcd 轮询，减轻了 etcd 的压力。
 </details>
 
-**3. kubelet 和 controller-manager 连的是本机 IP，kubectl 和 kube-proxy 连的是 `api.k8s.internal`。到第 11 章，`api.k8s.internal` 背后是 NLB。如果 NLB 坏了，谁还能工作？**
+**3. kubelet 和 controller-manager 连的是本机 IP，kubectl 和 kube-proxy 连的是 `api.k8s.internal`。等 `api.k8s.internal` 背后换成 NLB（LB 限制解除后），如果 NLB 坏了，谁还能工作？**
 
 <details>
 <summary>参考答案</summary>
@@ -1088,7 +1088,7 @@ exit
 这就是为什么"control plane 上的组件连本机"这个设计很重要：入口出问题时，控制面至少能保住自己。
 </details>
 
-**4. 如果当初把 `controlPlaneEndpoint` 写成 `10.0.10.11:6443`，第 11 章扩成 3 个 control plane 时会遇到什么麻烦？**
+**4. 如果当初把 `controlPlaneEndpoint` 写成 `10.0.10.11:6443`，第 06 章扩成 3 个 control plane 时会遇到什么麻烦？**
 
 <details>
 <summary>参考答案</summary>
@@ -1126,7 +1126,7 @@ git commit -m "ch03: kubeadm init"
 
 把 README 里第 03 章的状态改成 ✅。
 
-**下一章预告**：第 04 章，安装 Calico 网络插件。开头我们先验证一件事：关机再开机，控制面能不能完全靠 kubelet 和 static pod 自己恢复。然后看 CNI 到底是什么、Calico 是怎么给 Pod 分配 IP 的、VXLAN 怎么让不同节点上的 Pod 互相通信，以及节点终于变成 **Ready**、CoreDNS 终于跑起来的那一刻。
+**下一章预告**：第 04 章，安装 Calico 网络插件。开头我们先验证一件事：关机再开机，控制面能不能完全靠 kubelet 和 static pod 自己恢复。然后装上 Calico，看着节点终于变成 **Ready**、CoreDNS 终于跑起来的那一刻。
 
 ---
 

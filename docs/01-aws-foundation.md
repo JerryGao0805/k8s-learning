@@ -72,7 +72,7 @@
 │   └──────────────┘             └──────────────┘                          │
 │                                                                          │
 │   api.k8s.internal（Route53 私有托管区，只有 VPC 内能解析）                 │
-│      └─► 10.0.10.11 = cp-1:6443   （第 11 章改成指向内网 NLB）             │
+│      └─► 10.0.10.11 = cp-1:6443   （扩 HA 后改成指向内网 NLB）             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,7 +84,7 @@
 | **路由表** | 决定"去某个地址的包从哪儿走"。**公有子网和私有子网的唯一区别就是路由表**：公有子网的默认路由指向 Internet Gateway，私有子网的默认路由指向 NAT |
 | **NAT** | 让私有子网的机器能**主动访问公网**（装软件、拉镜像），但公网**无法主动连进来** |
 | **安全组** | 绑在网卡上的防火墙，规定允许哪些流量进来 |
-| **NLB** | Network Load Balancer，四层（TCP）负载均衡器。第 11 章有 3 个 control plane 之后，用它做 apiserver 的统一入口 |
+| **NLB** | Network Load Balancer，四层（TCP）负载均衡器。第 06 章有 3 个 control plane 之后，用它做 apiserver 的统一入口（前提是账号的 LB 限制已解除） |
 | **Route53 私有托管区** | 只在 VPC 内部生效的 DNS。`api.k8s.internal` 在公网上查不到 |
 | **IAM instance profile** | 给 EC2 实例分配一个"身份"，实例上的程序可以凭它调用 AWS API，不需要把密钥写在机器上 |
 | **SSM Session Manager** | 不开 22 端口也能登录机器。机器上的 SSM agent 主动往外连 AWS，你的登录请求由 AWS 转接过去 |
@@ -98,14 +98,14 @@
 | 文件 | 内容 | 重点看什么 |
 |---|---|---|
 | `versions.tf` / `providers.tf` | Terraform 和 provider 的版本、默认标签 | `default_tags`：所有资源都会打上 `Project=k8s-learning` |
-| `variables.tf` | 所有可调的参数 | `cp_count`、`worker_count`：第 11 章会改它们 |
+| `variables.tf` | 所有可调的参数 | `cp_count`、`worker_count`：第 06 章会改它们 |
 | `network.tf` | VPC、子网、路由表 | 公有/私有路由表的区别 |
 | `nat.tf` + `templates/nat-userdata.sh.tftpl` | NAT 实例 | `source_dest_check = false`，以及开机脚本里的 `ip_forward` 和 `MASQUERADE` |
 | `endpoints.tf` | S3 网关端点 | 为什么拉镜像的流量可以不走 NAT |
 | `security.tf` | 安全组 | 每条规则的注释：哪个端口是给哪个组件用的 |
 | `iam.tf` | 实例的 IAM 角色 | 为什么 control plane 和 worker 的权限不同 |
 | `nodes.tf` | K8s 节点 | 固定私网 IP；`http_put_response_hop_limit` 为什么 cp 是 2、worker 是 1 |
-| `api-lb.tf` | `api.k8s.internal` + 内网 NLB（开关 `enable_api_lb`，第 11 章打开） | 开头的大段注释：为什么用域名、为什么 NLB 先不建；以及 `preserve_client_ip = "false"`、`/readyz` 健康检查 |
+| `api-lb.tf` | `api.k8s.internal` + 内网 NLB（开关 `enable_api_lb`，LB 限制解除后打开） | 开头的大段注释：为什么用域名、为什么 NLB 先不建；以及 `preserve_client_ip = "false"`、`/readyz` 健康检查 |
 | `ssm.tf` | SSM 会话设置 | 登录后用 bash、60 分钟空闲超时 |
 | `scheduler.tf` + `lambda/autostop.py` | 每晚自动关机 | IAM 条件：只能 stop 带本项目标签的实例 |
 | `budget.tf` | 预算告警 | |
@@ -193,7 +193,7 @@ nodes = {
 
 ⏱️ **从这一刻开始计费。**
 
-> ⚠️ **如果 apply 报错 `OperationNotPermitted: This AWS account currently does not support creating load balancers`**：这是 AWS 对新账号的限制。本章默认不建负载均衡，不会遇到；但第 11、13 章要用。**现在就按 [附录：申请解除负载均衡限制](#-附录申请解除负载均衡限制) 开一个 support case**，AWS 可能要几天才回复。
+> ⚠️ **如果 apply 报错 `OperationNotPermitted: This AWS account currently does not support creating load balancers`**：这是 AWS 对新账号的限制。本章默认不建负载均衡，不会遇到；但第 06、09 章要用（没解除也能先用替代方案继续）。**现在就按 [附录：申请解除负载均衡限制](#-附录申请解除负载均衡限制) 开一个 support case**，AWS 可能要几天才回复。
 
 ### 步骤 5：查看状态
 
@@ -332,7 +332,7 @@ curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/iam/security-credentials/; echo
 ```
 
-最后一条会输出 `k8s-lab-control-plane`，这就是 Terraform 给 cp-1 分配的 IAM 角色。（第 10 章的 EBS CSI driver 会用这个身份去创建磁盘。）
+最后一条会输出 `k8s-lab-control-plane`，这就是 Terraform 给 cp-1 分配的 IAM 角色。（第 07 章的 EBS CSI driver 会用这个身份去创建磁盘。）
 
 输入 `exit` 退出。
 
@@ -353,9 +353,9 @@ aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
 你会看到一条 `Type = A`、`TTL = 30`、值为 `10.0.10.11` 的记录。
 
 - **A 记录**：域名直接对应一个或多个 IPv4 地址。
-- **TTL = 30**：客户端最多把解析结果缓存 30 秒。设得短，是为了第 11 章把它切到 NLB 时，客户端很快就能拿到新地址。
+- **TTL = 30**：客户端最多把解析结果缓存 30 秒。设得短，是为了以后把它切到 NLB 时，客户端很快就能拿到新地址。
 
-第 03 章 `kubeadm init` 时，集群记住的只是 `api.k8s.internal` 这个**名字**。第 11 章我们打开 `enable_api_lb`，这条记录会原地变成一条指向内网 NLB 的 alias 记录，而集群那边一行配置都不用改（原理见下面的「深入原理 1」）。
+第 03 章 `kubeadm init` 时，集群记住的只是 `api.k8s.internal` 这个**名字**。以后（LB 限制解除后）我们打开 `enable_api_lb`，这条记录会原地变成一条指向内网 NLB 的 alias 记录，而集群那边一行配置都不用改（原理见下面的「深入原理 1」）。
 
 ### 步骤 9：练习收工和开工
 
@@ -415,15 +415,15 @@ aws ec2 describe-route-tables \
 - 每个节点上 kubelet、kube-proxy 的配置文件
 - 你的 kubeconfig
 
-假如当时写的是 `10.0.10.11:6443`（cp-1 的 IP），等到第 11 章扩成 3 个 control plane 时，所有组件仍然只认 cp-1，cp-1 一挂集群就瘫了。要改的话，得重新签发证书、修改每个节点的配置，非常麻烦。
+假如当时写的是 `10.0.10.11:6443`（cp-1 的 IP），等到第 06 章扩成 3 个 control plane 时，所有组件仍然只认 cp-1，cp-1 一挂集群就瘫了。要改的话，得重新签发证书、修改每个节点的配置，非常麻烦。
 
-所以**从第一天起就用一个稳定的名字 `api.k8s.internal`**。现在它直接指向 cp-1。到第 11 章加了 cp-2、cp-3 之后，我们打开 `enable_api_lb`，让它改为指向内网 NLB，再由 NLB 把请求分给 3 个 control plane。**只改一条 DNS 记录，证书、kubeconfig、各节点的配置一行都不用动。**
+所以**从第一天起就用一个稳定的名字 `api.k8s.internal`**。现在它直接指向 cp-1。到第 06 章加了 cp-2、cp-3 之后，这条记录会列出 3 个 IP（DNS 轮询）；等 LB 限制解除，再打开 `enable_api_lb`，让它改为指向内网 NLB，由 NLB 把请求分给 3 个 control plane。**只改一条 DNS 记录，证书、kubeconfig、各节点的配置一行都不用动。**
 
 那为什么现在不直接把 NLB 建好？因为只有 1 个 control plane 时，NLB 后面只有一台机器，既不能分流也不能容灾，却每月固定收约 $16。等真有 3 个 control plane 时再加，正好。
 
 > 这就是"为未来设计"：生产环境里很多决定一旦做出就很难改，`controlPlaneEndpoint` 就是其中之一。
 
-### 2. `preserve_client_ip = "false"`：hairpin 问题（第 11 章开 NLB 时才会遇到，先了解）
+### 2. `preserve_client_ip = "false"`：hairpin 问题（打开 NLB 之后才会遇到，先了解）
 
 NLB 默认会**保留客户端的源 IP**：后端看到的包，源地址就是真实的客户端。大多数时候这很好，但在我们的场景里会出问题：
 
@@ -438,7 +438,7 @@ cp-1 上的 kubelet 访问 api.k8s.internal:6443
 
 这叫 **hairpin（发卡弯）问题**。有 3 个 control plane 时，cp-1 经 NLB 访问 apiserver，大约有 1/3 的连接会被转回 cp-1 自己，随机失败。这种时好时坏的故障是最难排查的。
 
-关掉源 IP 保留之后，NLB 会把源地址换成自己的 IP，回包就会先回到 NLB，再转给客户端。代价是 apiserver 的审计日志里看到的来源是 NLB 的 IP，不是真实客户端（第 16 章会提到）。这也是为什么安全组里 control plane 的 6443 端口要放行"来自 NLB 安全组"的流量。
+关掉源 IP 保留之后，NLB 会把源地址换成自己的 IP，回包就会先回到 NLB，再转给客户端。代价是 apiserver 的审计日志里看到的来源是 NLB 的 IP，不是真实客户端（第 21 章会提到）。这也是为什么安全组里 control plane 的 6443 端口要放行"来自 NLB 安全组"的流量。
 
 ### 3. SSM：没有任何入站端口，怎么登录的？
 
@@ -465,7 +465,7 @@ cp-1 上的 kubelet 访问 api.k8s.internal:6443
 - 宿主机上的进程（kubelet）：1 跳就够
 - **容器里**的进程：包要先经过容器的虚拟网卡，多一跳，所以需要 2
 
-我们把 worker 设成 1，这样 worker 上的业务 Pod **拿不到**实例凭证；control plane 设成 2，是因为第 10 章的 EBS CSI controller 运行在 Pod 里，需要凭证去创建 EBS 卷。第 16 章（安全）还会用 NetworkPolicy 进一步封堵。
+我们把 worker 设成 1，这样 worker 上的业务 Pod **拿不到**实例凭证；control plane 设成 2，是因为第 07 章的 EBS CSI controller 运行在 Pod 里，需要凭证去创建 EBS 卷。第 21 章（安全）还会用 NetworkPolicy 进一步封堵。
 
 ---
 
@@ -570,9 +570,9 @@ cp-1 的包经过 NAT 实例时，被 MASQUERADE 把源地址改成了 NAT 实�
 <details>
 <summary>参考答案</summary>
 
-首先，在第 11 章打开 NLB 之前，`api.k8s.internal` 本身就直接解析到 cp-1，worker 上的 kubelet 就是直连 cp-1 的 6443。
+首先，在打开 NLB 之前，`api.k8s.internal` 本身就直接解析到 cp-1，worker 上的 kubelet 就是直连 cp-1 的 6443。
 
-其次，即使以后有了 NLB，也不是所有流量都经过它。集群里有一个特殊的 Service 叫 `kubernetes`（ClusterIP 通常是 `10.96.0.1`），Pod 里的程序（例如 CoreDNS、各种 controller）通过它访问 apiserver。kube-proxy 会把发往 `10.96.0.1:443` 的流量 DNAT 到 apiserver 的**节点真实 IP**（`10.0.10.11:6443`），不经过 `api.k8s.internal`，直接到达 cp-1。所以 worker 必须能直接访问 cp-1 的 6443。第 08 章会亲眼看到这条 DNAT 规则。
+其次，即使以后有了 NLB，也不是所有流量都经过它。集群里有一个特殊的 Service 叫 `kubernetes`（ClusterIP 通常是 `10.96.0.1`），Pod 里的程序（例如 CoreDNS、各种 controller）通过它访问 apiserver。kube-proxy 会把发往 `10.96.0.1:443` 的流量 DNAT 到 apiserver 的**节点真实 IP**（`10.0.10.11:6443`），不经过 `api.k8s.internal`，直接到达 cp-1。所以 worker 必须能直接访问 cp-1 的 6443。第 14 章会亲眼看到这条 DNAT 规则。
 </details>
 
 **4. 如果把 `terraform.tfvars` 里的 `cp_count` 从 1 改成 3，`terraform plan` 会显示什么变更？**
@@ -585,12 +585,12 @@ cp-1 的包经过 NAT 实例时，被 MASQUERADE 把源地址改成了 NAT 实�
 - 新增 2 台实例：`aws_instance.control_plane["cp-2"]`、`["cp-3"]`
 - 原地修改 1 个资源：`aws_route53_record.api`，它的 IP 列表从 1 个变成 3 个（`10.0.10.11`、`10.0.11.11`、`10.0.12.11`），也就是 DNS 轮询
 
-其他资源都不变。第 11 章我们会同时打开 `enable_api_lb`，那时还会新增 NLB、监听器、目标组和 3 个目标注册（attachment），DNS 记录则改为指向 NLB。
+其他资源都不变。等 LB 限制解除、打开 `enable_api_lb` 时，还会新增 NLB、监听器、目标组和 3 个目标注册（attachment），DNS 记录则改为指向 NLB。
 
 可以现在就试一下 `terraform plan -var cp_count=3` 看看（只 plan，**不要 apply**）。这正是 `for_each` 的好处：增减节点只影响对应的那几个资源。
 </details>
 
-**5. `api-lb.tf` 里 NLB 的健康检查（第 11 章启用）为什么用 HTTPS `/readyz`，而不是简单地检查 6443 端口通不通？**
+**5. `api-lb.tf` 里 NLB 的健康检查（LB 限制解除后启用）为什么用 HTTPS `/readyz`，而不是简单地检查 6443 端口通不通？**
 
 <details>
 <summary>参考答案</summary>
@@ -614,7 +614,7 @@ git add -A
 git commit -m "ch01: AWS 网络地基"
 ```
 
-**stop 之后仍然在计费的资源**：EBS 磁盘（约 $0.26/天）、Route53 私有区（约 $0.02/天），合计约 **$0.28/天**。第 11 章打开内网 NLB 后，每天还要再加约 $0.55。
+**stop 之后仍然在计费的资源**：EBS 磁盘（约 $0.26/天）、Route53 私有区（约 $0.02/天），合计约 **$0.28/天**。打开内网 NLB 后，每天还要再加约 $0.55。
 
 把 README 里第 00、01 章的状态改成 ✅。
 
@@ -633,7 +633,7 @@ For more information, please contact AWS Support.
 
 这不是代码写错了，也不是配额不够（`aws elbv2 describe-account-limits` 里的配额是正常的），而是 AWS 对新账号的人工风控：需要开一个 support case，请 AWS 手动放开。**免费的 Basic 支持计划就能开这类 case**，不用花钱升级。
 
-> ⏳ 回复时间不固定，有人当天就解决了，也有人等了一周。所以**越早开越好**。第 11 章（内网 NLB）和第 13 章（公网 NLB）才用得到，时间很充裕。
+> ⏳ 回复时间不固定，有人当天就解决了，也有人等了一周。所以**越早开越好**。第 06 章（内网 NLB）和第 09 章（公网 NLB）才用得到；没解除也能先用替代方案继续。
 
 ### 第 1 步：记下报错里的 RequestID
 
@@ -692,4 +692,4 @@ Thank you!
 - AWS 的回复会发到账号的联系邮箱，也会显示在 Support Center 的这个 case 里。
 - 如果 AWS 追问用途，照实回答：个人学习用的 Kubernetes 实验环境，只在 us-east-1 用 2 个 NLB。
 - 如果 3~5 个工作日都没人处理，可以在 case 里回复一句礼貌的跟进：`Any update on this request? Thank you.`
-- 收到"已经解除"的回复后，**现在不需要做任何事**。第 11 章打开 `enable_api_lb` 时，apply 能成功就说明解除了。
+- 收到"已经解除"的回复后，**现在不需要做任何事**。到时打开 `enable_api_lb`（第 06 章或之后），apply 能成功就说明解除了。

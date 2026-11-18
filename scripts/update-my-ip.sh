@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------
-# 查出你当前的公网 IP，写进 terraform/terraform.tfvars 的 my_ip_cidr（第 13 章起使用）。
+# 查出你当前的公网 IP，写进 terraform/terraform.tfvars 的 my_ip_cidr（第 09 章起使用）。
 # 家里的宽带 IP 可能会变；访问公网入口被拒绝时，先跑一下这个脚本，再 terraform apply。
 #   用法：./scripts/update-my-ip.sh
 # ------------------------------------------------------------

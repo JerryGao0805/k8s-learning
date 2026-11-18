@@ -2,7 +2,7 @@
 # 网络地基：VPC、子网、互联网网关、路由表
 #
 #   VPC 10.0.0.0/16
-#   ├── public  10.0.0.0/24  (AZ a)  ← NAT 实例、（第 13 章）公网 NLB
+#   ├── public  10.0.0.0/24  (AZ a)  ← NAT 实例、（第 09 章）公网 NLB
 #   ├── public  10.0.1.0/24  (AZ b)
 #   ├── public  10.0.2.0/24  (AZ c)
 #   ├── private 10.0.10.0/24 (AZ a)  ← cp-1, worker-1, 内网 API NLB

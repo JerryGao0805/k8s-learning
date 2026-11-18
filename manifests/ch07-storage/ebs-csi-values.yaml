@@ -1,0 +1,42 @@
+# 第 07 章：aws-ebs-csi-driver 的 Helm values（chart 2.68.1）
+# 只写和默认值不同的部分。
+
+controller:
+  # controller 负责调 AWS API 创建 / 挂载 / 删除 EBS 卷，需要 AWS 凭证。
+  # 凭证来自节点的 IAM 角色：只有 control plane 的角色带了 AmazonEBSCSIDriverPolicyV2（terraform/iam.tf），
+  # 而且 control plane 的 IMDS hop limit 是 2（Pod 里能访问到 IMDS），所以 controller 固定跑在 control plane 上。
+  region: us-east-1
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - effect: NoExecute
+      operator: Exists
+      tolerationSeconds: 300
+  # 给它创建的每个卷打标签：方便在 AWS 控制台里认出来，destroy 前用 scripts/cleanup-orphans.sh 清理
+  k8sTagClusterId: k8s-lab
+  extraVolumeTags:
+    Project: k8s-learning
+
+node:
+  # node 插件（每个节点一个）负责把已挂到机器上的卷格式化、mount 进 Pod。
+  # 它要从 IMDS 读本机的实例 ID 和可用区。worker 的 IMDS hop limit 是 1，Pod 网络里访问不到，
+  # 所以用宿主机网络（hostNetwork）运行。
+  hostNetwork: true
+  enableWindows: false
+
+# 默认 StorageClass：没写 storageClassName 的 PVC 都用它
+storageClasses:
+  - name: gp3
+    annotations:
+      storageclass.kubernetes.io/is-default-class: "true"
+    volumeBindingMode: WaitForFirstConsumer   # 等 Pod 调度到某个节点后，再在那个节点的可用区建卷
+    reclaimPolicy: Delete                     # 删掉 PVC 时连带删掉 EBS 卷
+    allowVolumeExpansion: true
+    parameters:
+      type: gp3
+      encrypted: "true"

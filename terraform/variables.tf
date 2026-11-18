@@ -41,7 +41,7 @@ variable "azs" {
 
 # ---------- 节点 ----------
 variable "cp_count" {
-  description = "control plane 节点数。从 1 开始，第 11 章改成 3 做高可用（必须是奇数）"
+  description = "control plane 节点数。从 1 开始，第 06 章改成 3 做高可用（必须是奇数）"
   type        = number
   default     = 1
 
@@ -52,7 +52,7 @@ variable "cp_count" {
 }
 
 variable "worker_count" {
-  description = "worker 节点数。从 2 开始，第 11 章改成 3"
+  description = "worker 节点数。从 2 开始，第 06 章改成 3"
   type        = number
   default     = 2
 
@@ -91,8 +91,18 @@ variable "enable_api_lb" {
   description = <<-EOT
     是否在 control plane 前面放内网 NLB。
     false（默认）：api.k8s.internal 直接解析到所有 control plane 的私网 IP。
-    true：api.k8s.internal 指向内网 NLB。第 11 章扩成 3 个 control plane 时打开。
+    true：api.k8s.internal 指向内网 NLB。有 3 个 control plane（第 06 章）、并且账号能创建负载均衡之后打开。
     注意：新 AWS 账号可能不允许创建负载均衡，需要先开 support case 解除（见第 01 章附录）。
+  EOT
+  type        = bool
+  default     = false
+}
+
+# ---------- 公网入口 ----------
+variable "enable_public_ingress" {
+  description = <<-EOT
+    第 09 章：是否打开公网入口（给 NAT 实例绑 EIP，放行 my_ip_cidr 访问 80/443，见 ingress.tf）。
+    打开前先填好 my_ip_cidr。长时间不学时可以关掉，省下 EIP 的费用（约 $3.6/月）。
   EOT
   type        = bool
   default     = false
@@ -100,7 +110,7 @@ variable "enable_api_lb" {
 
 # ---------- 访问 / 安全 ----------
 variable "my_ip_cidr" {
-  description = "你家/办公室的公网 IP（/32）。第 13 章公网入口才用到；用 scripts/update-my-ip.sh 自动填"
+  description = "你家/办公室的公网 IP（/32）。第 09 章公网入口才用到；用 scripts/update-my-ip.sh 自动填"
   type        = string
   default     = null
 }

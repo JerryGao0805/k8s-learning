@@ -159,7 +159,7 @@ run "${APT[@]}" update
 run "${APT[@]}" install --allow-change-held-packages \
   "kubelet=${K8S_PKG_VERSION}" "kubeadm=${K8S_PKG_VERSION}" "kubectl=${K8S_PKG_VERSION}" \
   "cri-tools=${CRI_TOOLS_VERSION}"
-# 锁定版本：apt upgrade / unattended-upgrades 都不会再动它们。升级集群要走 kubeadm upgrade（第 18 章）。
+# 锁定版本：apt upgrade / unattended-upgrades 都不会再动它们。升级集群要走 kubeadm upgrade（第 22 章）。
 run apt-mark hold kubelet kubeadm kubectl cri-tools containerd
 # kubelet 会进入"启动 → 找不到配置 → 退出 → 重启"的循环，直到第 03 章 kubeadm 给它写好配置。这是正常的。
 run systemctl enable --now kubelet
@@ -170,7 +170,7 @@ run crictl config --set runtime-endpoint=unix:///run/containerd/containerd.sock
 run crictl info
 
 # ------------------------------------------------------------
-step "[7/7] ecr-credential-provider ${ECR_CP_VERSION}（第 12 章拉 ECR 私有镜像时用）"
+step "[7/7] ecr-credential-provider ${ECR_CP_VERSION}（第 08 章拉 ECR 私有镜像时用）"
 bin="${ECR_CP_BIN_DIR}/ecr-credential-provider"
 if ! echo "${ECR_CP_SHA256}  ${bin}" | sha256sum -c --status 2>/dev/null; then
   tmp=$(mktemp)

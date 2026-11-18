@@ -1,0 +1,26 @@
+# Calico 配置（第 04 章）。交给 tigera-operator，由它负责装好、看好 Calico。
+# 基于官方 v3.33.1 的 custom-resources.yaml 修改，只保留 Installation 和 APIServer。
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    linuxDataplane: Iptables          # 和 kube-proxy 一样用 iptables（默认值，写出来固定住）
+    bgp: Disabled                     # 纯 VXLAN 用不到 BGP，节点上就不跑 BIRD
+    nodeAddressAutodetectionV4:
+      kubernetes: NodeInternalIP      # 节点 IP 直接用 K8s 记录的 InternalIP，不让 Calico 去猜
+    ipPools:
+      - name: default-ipv4-ippool
+        cidr: 192.168.0.0/16          # 必须和 kubeadm 的 podSubnet 一致
+        blockSize: 26                 # 每个节点按 /26（64 个 IP）一块一块地领
+        encapsulation: VXLAN          # 官方默认是 VXLANCrossSubnet，在 AWS 上会出问题（第 11 章演练）
+        natOutgoing: Enabled          # Pod 访问集群外时，源地址换成节点 IP
+        nodeSelector: all()
+---
+# 名字叫 APIServer，在 v3 CRD 模式下实际部署的是 admission webhook（calico-webhooks）
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}

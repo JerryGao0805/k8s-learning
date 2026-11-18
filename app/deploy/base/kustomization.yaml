@@ -1,0 +1,24 @@
+# Kustomize 的 base：和环境无关的公共部分。
+# 镜像名在这里只是占位（api / web），具体用哪个仓库、哪个版本由 overlays/ 决定。
+#
+# 注意：Secret postgres-auth 不在这里（密码不能进 git），部署前用 kubectl 手动创建，见 app/README.md。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 所有资源都放进 app 命名空间（各文件里就不用重复写 namespace 了）
+namespace: app
+
+# 给所有资源以及 Pod 模板统一加上 part-of 标签，表示它们同属一个应用。
+# 不加进 selector：selector 创建后就不能改，以后改标签会导致 apply 失败。
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: notes-app
+    includeTemplates: true
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - redis.yaml
+  - api.yaml
+  - web.yaml

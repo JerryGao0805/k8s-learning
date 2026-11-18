@@ -1,0 +1,22 @@
+# lab 环境的 overlay：在 base 基础上，把占位镜像名换成 ECR 里的真实镜像。
+#
+# ECR_REGISTRY 是一个字面占位符，部署时用 sed 替换成 <账号ID>.dkr.ecr.us-east-1.amazonaws.com。
+# 这样 AWS 账号 ID 永远不会被提交进 git。部署命令（在仓库根目录执行）：
+#
+#   export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+#   kubectl kustomize app/deploy/overlays/lab | sed "s|ECR_REGISTRY|${ECR_REGISTRY}|g" | kubectl apply -f -
+#
+# 发布新版本：用 app/build-push.sh 推一个新版本号，再改下面的 newTag，重新执行上面的命令。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: api                         # base 里写的占位名
+    newName: ECR_REGISTRY/k8s-lab/api
+    newTag: "0.1.0"
+  - name: web
+    newName: ECR_REGISTRY/k8s-lab/web
+    newTag: "0.1.0"

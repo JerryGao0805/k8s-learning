@@ -1,0 +1,57 @@
+# 第 09 章：集群的公网入口 Gateway。
+# 里面的 ${...} 在 apply 时由 envsubst 填入（域名等不进 git），见 docs/09-https-ingress.md 步骤 7。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: lab
+  namespace: gateway
+  annotations:
+    # cert-manager：按下面 https listener 的 hostname 申请证书，存进 lab-wildcard-tls
+    cert-manager.io/cluster-issuer: ${CLUSTER_ISSUER}
+    # external-dns：这个 Gateway 上所有 HTTPRoute 的域名，都解析到这个 IP（NAT 实例的 EIP）
+    external-dns.kubernetes.io/target: ${INGRESS_IP}
+spec:
+  gatewayClassName: envoy
+  listeners:
+    # 80：只做一件事，把 http 重定向到 https（见 https-redirect.yaml）
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "*.lab.${LAB_DOMAIN}"
+      allowedRoutes:
+        namespaces:
+          from: Same
+    # 443：在这里解开 TLS，再按 HTTPRoute 转给各个应用。一张通配符证书管所有 *.lab 子域名
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.lab.${LAB_DOMAIN}"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: lab-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All              # app、monitoring 等命名空间的 HTTPRoute 都可以挂上来
+---
+# http → https 的 301 重定向
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: gateway
+spec:
+  parentRefs:
+    - name: lab
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
